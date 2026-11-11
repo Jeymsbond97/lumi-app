@@ -8,3 +8,4 @@ android/
 .env
 .env.*
 .DS_Store
+PLAN.md
