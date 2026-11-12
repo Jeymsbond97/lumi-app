@@ -52,8 +52,10 @@ import { MeshoptDecoder } from 'three/examples/jsm/libs/meshopt_decoder.module.j
 
 const canvas = document.getElementById('c');
 const renderer = new THREE.WebGLRenderer({ canvas, antialias: true });
-// sharpness adapts to the device: start at 1.5x, go down when frames are slow, back up when there is room
-const PR_MAX = Math.min(devicePixelRatio, 1.5), PR_MIN = 0.75;
+// sharpness adapts to the device: start at 1.5x, go down when frames are slow, back up when there is room.
+// Never below 1x: under it the robot is drawn smaller than the screen and stretched, and looks blurred.
+// 30 fps is enough for a status screen, so sharpness is only given up below that.
+const PR_MAX = Math.min(devicePixelRatio, 1.5), PR_MIN = Math.min(devicePixelRatio, 1);
 let pixelRatio = PR_MAX;
 renderer.setPixelRatio(pixelRatio);
 renderer.toneMapping = THREE.ACESFilmicToneMapping;
@@ -464,7 +466,7 @@ function adaptQuality() {
   const fps = frames * 1000 / span;
   frames = 0; fpsSince = now;
   window.ReactNativeWebView?.postMessage(JSON.stringify({ type: 'perf', fps: Math.round(fps), pixelRatio }));
-  const next = fps < 40 ? Math.max(PR_MIN, pixelRatio - 0.25) : fps > 57 ? Math.min(PR_MAX, pixelRatio + 0.25) : pixelRatio;
+  const next = fps < 30 ? Math.max(PR_MIN, pixelRatio - 0.25) : fps > 57 ? Math.min(PR_MAX, pixelRatio + 0.25) : pixelRatio;
   if (next !== pixelRatio) {
     pixelRatio = next;
     renderer.setPixelRatio(pixelRatio);
