@@ -1,0 +1,494 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no,viewport-fit=cover">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<title>Lumi 3D</title>
+<link href="https://fonts.googleapis.com/css2?family=Unbounded:wght@500;600&family=Hanken+Grotesk:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+  html,body{margin:0;height:100%;background:#02040a;overflow:hidden;font-family:'Hanken Grotesk',sans-serif;color:#eef2f5}
+  #c{position:fixed;inset:0;width:100%;height:100%;display:block;touch-action:none}
+  .hud{pointer-events:none;position:fixed;left:calc(24px + env(safe-area-inset-left));top:calc(18px + env(safe-area-inset-top))}
+  .name{font-family:'Unbounded',sans-serif;font-weight:600;font-size:clamp(18px,4.4vh,36px);letter-spacing:.5px;pointer-events:none}
+  .state{margin-top:.4em;font-size:clamp(11px,2.1vh,18px);color:#8fa0ab;display:flex;gap:16px;align-items:center}
+  .state b{color:#eef2f5;font-weight:600}
+  #charge{all:unset;color:#7fd6ff;border:1px solid #1d4a5e;border-radius:999px;padding:.15em .75em;font-size:clamp(11px,1.9vh,16px)}
+  #charge.off{color:#8fa0ab;border-color:#26323a}
+  #arm{all:unset;border:1px solid #26323a;border-radius:999px;padding:.15em .75em;font-size:clamp(11px,1.9vh,16px);color:#8fa0ab}
+  #arm i{display:inline-block;width:.6em;height:.6em;border-radius:50%;margin-right:.45em;vertical-align:0}
+  .live{position:fixed;left:calc(24px + env(safe-area-inset-left));bottom:calc(18px + env(safe-area-inset-bottom));font-size:clamp(11px,1.9vh,16px);color:#8fa0ab;display:grid;grid-template-columns:auto auto;gap:.4em 1.3em;pointer-events:none}
+  .live b{color:#eef2f5;font-weight:600}
+  .hint{position:fixed;right:calc(24px + env(safe-area-inset-right));bottom:calc(18px + env(safe-area-inset-bottom));font-size:clamp(10px,1.7vh,15px);color:#9fb0bb;pointer-events:none;display:flex;gap:1.4em;padding:.45em 1em;border-radius:999px;background:rgba(2,6,12,.55);backdrop-filter:blur(6px);-webkit-backdrop-filter:blur(6px)}
+  /* inside the app these words are drawn natively, in the chosen language */
+  .in-app .hud,.in-app .live,.in-app .hint{display:none}
+  #err{position:fixed;inset:auto 32px 80px auto;color:#ff7b7b;font-size:12px;max-width:40ch}
+</style>
+<script type="importmap">
+{"imports":{
+  "three":"https://cdn.jsdelivr.net/npm/three@0.169.0/build/three.module.js",
+  "three/examples/jsm/":"https://cdn.jsdelivr.net/npm/three@0.169.0/examples/jsm/"
+  }}
+</script>
+</head>
+<body>
+<canvas id="c"></canvas>
+<div class="hud"><div class="name">Lumi</div>
+  <div class="state"><b id="vStatus">Ready</b><span id="vBatt"></span><button id="charge">Charging</button><button id="arm">Arm enabled</button></div></div>
+<div class="live">
+  <span>Head</span><b id="vHead">0°</b>
+  <span>Waist</span><b id="vWaist">0°</b>
+  <span>Lift</span><b id="vLift">0 mm</b>
+</div>
+<div class="hint"><span>Drag to turn</span><span>Double tap to reset</span></div>
+<div id="err"></div>
+
+<script type="module">
+import * as THREE from 'three';
+import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
+import { RoomEnvironment } from 'three/examples/jsm/environments/RoomEnvironment.js';
+import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
+import { MeshoptDecoder } from 'three/examples/jsm/libs/meshopt_decoder.module.js';
+
+const canvas = document.getElementById('c');
+const renderer = new THREE.WebGLRenderer({ canvas, antialias: true });
+// sharpness adapts to the device: start at 1.5x, go down when frames are slow, back up when there is room
+const PR_MAX = Math.min(devicePixelRatio, 1.5), PR_MIN = 0.75;
+let pixelRatio = PR_MAX;
+renderer.setPixelRatio(pixelRatio);
+renderer.toneMapping = THREE.ACESFilmicToneMapping;
+renderer.toneMappingExposure = 1.1;
+renderer.shadowMap.enabled = true;
+renderer.shadowMap.autoUpdate = false;   // the robot's shadow is redrawn only when the robot moves
+renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+
+const scene = new THREE.Scene();
+const pmrem = new THREE.PMREMGenerator(renderer);
+scene.environment = pmrem.fromScene(new RoomEnvironment(), 0.04).texture;
+scene.environmentIntensity = 1.3;
+
+const camera = new THREE.PerspectiveCamera(32, 1, 0.05, 400);
+camera.position.set(1.25, 1.35, 3.6);
+const controls = new OrbitControls(camera, canvas);
+controls.target.set(0, 0.78, 0);
+controls.enableDamping = true;
+// free turn all round; pinch zooms towards the fingers; no free pan
+controls.enablePan = false;
+controls.zoomToCursor = true;
+controls.minPolarAngle = 0.12 * Math.PI;
+controls.maxPolarAngle = 0.56 * Math.PI;   // a little below level, camera stays above the floor
+controls.rotateSpeed = 0.6;
+controls.zoomSpeed = 0.8;
+const HOME_DIR = new THREE.Vector3(1.25, 0.57, 3.6).normalize();
+const ROBOT_H = 1.62;                       // floor to head top, metres, with a small margin
+function homeDistance() {
+  // fit the robot to most of the screen height; a little tighter on short phone screens
+  const fill = innerHeight < 500 ? 0.92 : 0.84;
+  return ROBOT_H / fill / (2 * Math.tan(THREE.MathUtils.degToRad(camera.fov / 2)));
+}
+const HOME_TARGET = new THREE.Vector3(0, 0.78, 0);
+function frameHome() {
+  const d = homeDistance();
+  controls.target.copy(HOME_TARGET);
+  camera.position.copy(controls.target).addScaledVector(HOME_DIR, d);
+  controls.minDistance = d * 0.45;
+  controls.maxDistance = d * 1.5;
+  controls.update();
+}
+frameHome();
+// when zoomed in, sliding one finger up or down moves the view along the robot
+// (finger up goes towards the head); at the full view it tilts as usual
+const POLAR_MIN = 0.12 * Math.PI, POLAR_MAX = 0.56 * Math.PI;
+let zoomed = false, slideY = null;
+function isZoomed() { return camera.position.distanceTo(controls.target) < homeDistance() * 0.85; }
+canvas.addEventListener('pointerdown', e => { slideY = e.clientY; });
+canvas.addEventListener('pointermove', e => {
+  if (slideY === null || down.size !== 1 || !zoomed) { slideY = e.clientY; return; }
+  const dist = camera.position.distanceTo(controls.target);
+  const worldPerPx = 2 * dist * Math.tan(THREE.MathUtils.degToRad(camera.fov / 2)) / innerHeight;
+  let dy = -(e.clientY - slideY) * worldPerPx;
+  slideY = e.clientY;
+  const y = THREE.MathUtils.clamp(controls.target.y + dy, 0.12, 1.5);
+  dy = y - controls.target.y;
+  controls.target.y += dy; camera.position.y += dy;
+});
+addEventListener('pointerup', () => { slideY = null; });
+function updateView() {
+  const z = isZoomed();
+  if (z && !zoomed) controls.minPolarAngle = controls.maxPolarAngle = controls.getPolarAngle();
+  if (!z && zoomed) { controls.minPolarAngle = POLAR_MIN; controls.maxPolarAngle = POLAR_MAX; }
+  zoomed = z;
+  // keep the look point on the robot
+  const t = controls.target;
+  t.x = THREE.MathUtils.clamp(t.x, -0.45, 0.45); t.z = THREE.MathUtils.clamp(t.z, -0.45, 0.45);
+  t.y = THREE.MathUtils.clamp(t.y, 0.12, 1.5);
+  // zooming back out glides the view back to the whole robot
+  if (!z) {
+    const before = t.clone();
+    t.lerp(HOME_TARGET, 0.12);
+    camera.position.add(t.clone().sub(before));
+  }
+}
+// double tap brings the view back to the start
+// a tap is one finger, short and still; lifting two fingers after a pinch is not a tap
+const down = new Map();
+let maxFingers = 0, lastTap = 0;
+canvas.addEventListener('pointerdown', e => {
+  down.set(e.pointerId, { x: e.clientX, y: e.clientY, t: performance.now() });
+  maxFingers = Math.max(maxFingers, down.size);
+});
+function endPointer(e, cancelled) {
+  const d = down.get(e.pointerId);
+  down.delete(e.pointerId);
+  const wasMulti = maxFingers > 1;
+  if (down.size === 0) maxFingers = 0;
+  if (!d || cancelled || wasMulti) { lastTap = 0; return; }
+  const now = performance.now();
+  const still = Math.hypot(e.clientX - d.x, e.clientY - d.y) < 10 && now - d.t < 250;
+  if (!still) { lastTap = 0; return; }
+  if (now - lastTap < 320) { frameHome(); lastTap = 0; } else lastTap = now;
+}
+canvas.addEventListener('pointerup', e => endPointer(e, false));
+canvas.addEventListener('pointercancel', e => endPointer(e, true));
+
+// ---------------------------------------------------------------- lights
+const key = new THREE.DirectionalLight(0xffffff, 2.8);
+key.position.set(2.5, 4, 2.5); key.castShadow = true;
+key.shadow.mapSize.set(1024, 1024); key.shadow.camera.near = 0.5; key.shadow.camera.far = 12;
+Object.assign(key.shadow.camera, { left: -1.5, right: 1.5, top: 2, bottom: -1 });
+key.shadow.bias = -0.0004;
+scene.add(key);
+const rim = new THREE.DirectionalLight(0x6fe8ff, 2.0); rim.position.set(-3, 2.2, -3); scene.add(rim);
+const rim2 = new THREE.DirectionalLight(0x9a7bff, 0.9); rim2.position.set(3, 1.5, -2.5); scene.add(rim2);
+scene.add(new THREE.HemisphereLight(0xe6f2ff, 0x081420, 0.8));
+const fill = new THREE.DirectionalLight(0xffffff, 1.1); fill.position.set(-1, 1.5, 4); scene.add(fill);
+
+// ---------------------------------------------------------------- sky: the same all round, so every angle looks finished
+const NOISE = `
+  float hash(vec2 p){return fract(sin(dot(p,vec2(127.1,311.7)))*43758.5453);}
+  float noise(vec2 p){vec2 i=floor(p),f=fract(p);f=f*f*(3.-2.*f);
+    return mix(mix(hash(i),hash(i+vec2(1,0)),f.x),mix(hash(i+vec2(0,1)),hash(i+vec2(1,1)),f.x),f.y);}
+  float fbm(vec2 p){float v=0.,a=.5;for(int i=0;i<5;i++){v+=a*noise(p);p*=2.03;a*=.5;}return v;}`;
+const sky = new THREE.Mesh(new THREE.SphereGeometry(200, 64, 32), new THREE.ShaderMaterial({
+  side: THREE.BackSide, depthWrite: false, fog: false,
+  uniforms: { uTime: { value: 0 } },
+  vertexShader: `varying vec3 vDir; void main(){ vDir=normalize(position); gl_Position=projectionMatrix*modelViewMatrix*vec4(position,1.); }`,
+  fragmentShader: `
+    uniform float uTime; varying vec3 vDir; ${NOISE}
+    void main(){
+      vec3 d=normalize(vDir); float h=d.y;
+      float az=atan(d.z,d.x);
+      vec3 top=vec3(0.006,0.010,0.028), mid=vec3(0.012,0.030,0.060), hor=vec3(0.03,0.16,0.22);
+      vec3 col=mix(mid,top,smoothstep(0.05,0.7,h));
+      col=mix(col,hor,exp(-abs(h-0.02)*14.)*0.9);                 // glowing horizon band all round
+      col+=vec3(0.30,0.18,0.55)*exp(-abs(h-0.01)*40.)*0.25;        // thin violet line on the horizon
+      // aurora curtains
+      float a=fbm(vec2(az*3.0+uTime*0.02, h*4.0-uTime*0.03));
+      float band=smoothstep(0.08,0.28,h)*smoothstep(0.65,0.3,h);
+      col+=mix(vec3(0.0,0.55,0.45),vec3(0.25,0.2,0.75),a)*pow(a,3.0)*band*0.55;
+      // stars, twinkling
+      vec2 g=vec2(az*90.0, asin(clamp(h,-1.,1.))*90.0);
+      vec2 cell=floor(g); float r=hash(cell);
+      float star=step(0.985,r)*smoothstep(0.35,0.0,length(fract(g)-0.5));
+      star*=0.6+0.4*sin(uTime*(1.0+r*3.0)+r*40.0);
+      col+=vec3(0.75,0.9,1.0)*star*smoothstep(0.02,0.2,h);
+      gl_FragColor=vec4(col,1.);
+    }`
+}));
+scene.add(sky);
+
+// a planet that keeps to the upper left of whatever way you look, with an atmosphere and a ring
+const planetRig = new THREE.Group(); scene.add(planetRig);
+const planet = new THREE.Mesh(new THREE.SphereGeometry(9, 64, 48), new THREE.ShaderMaterial({
+  fog: false, uniforms: { uTime: { value: 0 }, uSun: { value: new THREE.Vector3(1, 0.4, 0.6).normalize() } },
+  vertexShader: `varying vec3 vN; varying vec3 vP; varying vec3 vV;
+    void main(){ vN=normalize(normalMatrix*normal); vP=position; vec4 mv=modelViewMatrix*vec4(position,1.); vV=normalize(-mv.xyz); gl_Position=projectionMatrix*mv; }`,
+  fragmentShader: `uniform float uTime; uniform vec3 uSun; varying vec3 vN; varying vec3 vP; varying vec3 vV; ${NOISE}
+    void main(){
+      vec3 p=normalize(vP);
+      float bands=fbm(vec2(p.y*7.0, atan(p.z,p.x)*1.5+uTime*0.01));
+      vec3 base=mix(vec3(0.03,0.10,0.16),vec3(0.10,0.32,0.38),bands);
+      float lit=clamp(dot(vN,normalize(vec3(-0.6,0.3,0.7))),0.,1.);
+      float fres=pow(1.0-max(dot(vN,vV),0.),3.0);
+      vec3 col=base*(0.08+lit*0.9)+vec3(0.2,0.9,1.0)*fres*0.9;
+      gl_FragColor=vec4(col,1.);
+    }`
+}));
+const ring = new THREE.Mesh(new THREE.RingGeometry(12, 17, 128, 1), new THREE.ShaderMaterial({
+  transparent: true, side: THREE.DoubleSide, depthWrite: false, fog: false,
+  vertexShader: `varying vec2 vUv; varying float vR; void main(){ vR=length(position.xy); gl_Position=projectionMatrix*modelViewMatrix*vec4(position,1.); }`,
+  fragmentShader: `varying float vR; void main(){ float t=(vR-12.)/5.;
+    float a=(0.25+0.25*sin(t*60.))*smoothstep(0.,0.1,t)*smoothstep(1.,0.75,t);
+    gl_FragColor=vec4(vec3(0.45,0.85,0.95),a*0.35); }`
+}));
+ring.rotation.x = Math.PI * 0.42; ring.rotation.y = 0.35;
+const planetBody = new THREE.Group(); planetBody.add(planet, ring);
+planetBody.position.set(-68, 44, -178); planetBody.scale.setScalar(1.6);  // beyond the city
+planetRig.rotation.order = 'YXZ';
+planetRig.add(planetBody);
+
+// distant city of light all round the horizon
+const city = (() => {
+  const N = 260, geo = new THREE.BoxGeometry(1, 1, 1); geo.translate(0, 0.5, 0);
+  const mat = new THREE.ShaderMaterial({
+    transparent: true, depthWrite: false, fog: false, uniforms: { uTime: { value: 0 } },
+    vertexShader: `attribute float aSeed; varying vec3 vL; varying float vSeed; varying vec3 vNrm;
+      void main(){ vL=position; vSeed=aSeed; vNrm=normal; gl_Position=projectionMatrix*modelViewMatrix*instanceMatrix*vec4(position,1.); }`,
+    fragmentShader: `uniform float uTime; varying vec3 vL; varying float vSeed; varying vec3 vNrm;
+      float hash(vec2 p){return fract(sin(dot(p,vec2(127.1,311.7)))*43758.5453);}
+      void main(){
+        float side=1.0-abs(vNrm.y);
+        vec2 w=vec2((vL.x+vL.z)*6.0, vL.y*22.0);
+        float win=step(0.6,fract(w.x))*step(0.5,fract(w.y))*step(0.55,hash(floor(w)+vSeed));
+        float edge=smoothstep(0.96,1.0,vL.y);
+        vec3 c=mix(vec3(0.15,0.85,1.0),vec3(0.6,0.45,1.0),vSeed);
+        float blink=step(0.92,fract(vSeed*13.0))*step(0.5,fract(uTime*0.5+vSeed*7.0));
+        vec3 col=vec3(0.008,0.018,0.034)+c*(win*0.35*side+edge*0.6+blink*edge*2.0);
+        float fade=smoothstep(0.0,0.35,vL.y);
+        gl_FragColor=vec4(col, 0.92*mix(0.35,1.0,fade));
+      }`
+  });
+  const mesh = new THREE.InstancedMesh(geo, mat, N);
+  const seeds = new Float32Array(N), m = new THREE.Matrix4(), q = new THREE.Quaternion();
+  for (let i = 0; i < N; i++) {
+    const a = (i / N) * Math.PI * 2 + Math.random() * 0.02, r = 140 + Math.random() * 40;
+    const tall = Math.random() < 0.1 ? 9 + Math.random() * 9 : 2 + Math.random() * 5;
+    const w = 2 + Math.random() * 4;
+    q.setFromAxisAngle(new THREE.Vector3(0, 1, 0), -a);
+    m.compose(new THREE.Vector3(Math.cos(a) * r, -0.5, Math.sin(a) * r), q, new THREE.Vector3(w, tall, w * (0.6 + Math.random())));
+    mesh.setMatrixAt(i, m); seeds[i] = Math.random();
+  }
+  geo.setAttribute('aSeed', new THREE.InstancedBufferAttribute(seeds, 1));
+  scene.add(mesh);
+  return mat;
+})();
+
+// wireframe landscape as a ring round the stage, rolling slowly; seen from every side
+const terrainMat = new THREE.ShaderMaterial({
+  transparent: true, wireframe: true, depthWrite: false, fog: false,
+  uniforms: { uTime: { value: 0 } },
+  vertexShader: `uniform float uTime; varying float vH; varying float vR; ${NOISE}
+    void main(){
+      vec3 p=position; float r=length(p.xy);
+      vec2 q=p.xy*0.12+vec2(0.,uTime*0.05);
+      float h=fbm(q)*3.2*smoothstep(6.,22.,r)+sin(r*0.35-uTime*0.6)*0.08*smoothstep(4.,9.,r);
+      p.z=h; vH=h; vR=r;
+      gl_Position=projectionMatrix*modelViewMatrix*vec4(p,1.);
+    }`,
+  fragmentShader: `varying float vH; varying float vR;
+    void main(){
+      float a=(0.05+vH*0.12)*smoothstep(4.5,9.,vR)*smoothstep(60.,30.,vR);
+      vec3 c=mix(vec3(0.15,0.95,0.75),vec3(0.35,0.75,1.0),clamp(vH/3.,0.,1.));
+      gl_FragColor=vec4(c*1.2,a);
+    }`
+});
+const terrain = new THREE.Mesh(new THREE.PlaneGeometry(120, 120, 180, 180), terrainMat);
+terrain.rotation.x = -Math.PI / 2; terrain.position.y = -0.03; scene.add(terrain);
+
+// floor: a fine glowing grid that fades away from the stage, with a scan wave
+const floorMat = new THREE.ShaderMaterial({
+  transparent: true, depthWrite: false, extensions: { derivatives: true },
+  uniforms: { uTime: { value: 0 } },
+  vertexShader: `varying vec2 vP; void main(){ vP=position.xy; gl_Position=projectionMatrix*modelViewMatrix*vec4(position,1.); }`,
+  fragmentShader: `uniform float uTime; varying vec2 vP;
+    float grid(vec2 p,float s){ vec2 g=abs(fract(p/s-0.5)-0.5)/fwidth(p/s); return 1.0-min(min(g.x,g.y),1.0); }
+    void main(){
+      float r=length(vP);
+      float g=grid(vP,0.5)*0.5+grid(vP,2.5)*0.8;
+      float wave=exp(-pow((r-mod(uTime*1.6,9.0)-1.0)*2.2,2.0));
+      float a=g*(0.05+wave*0.35)*smoothstep(7.,1.8,r)*smoothstep(1.05,1.6,r);
+      gl_FragColor=vec4(vec3(0.25,0.9,1.0),a);
+    }`
+});
+const floor = new THREE.Mesh(new THREE.PlaneGeometry(20, 20), floorMat);
+floor.rotation.x = -Math.PI / 2; floor.position.y = -0.005; scene.add(floor);
+
+// ---------------------------------------------------------------- the stage: a charging pad of dark glass with live rings
+const stage = new THREE.Group(); scene.add(stage);
+const padMat = new THREE.MeshPhysicalMaterial({ color: 0x02040a, roughness: 0.6, metalness: 0.9, envMapIntensity: 0.35, clearcoat: 0 });  // dark smoked metal, no grey sheen
+const pad = new THREE.Mesh(new THREE.CylinderGeometry(0.92, 0.96, 0.045, 128), padMat);
+pad.position.y = -0.0225; pad.receiveShadow = true; stage.add(pad);
+// glowing lip round the pad edge
+const lip = new THREE.Mesh(new THREE.TorusGeometry(0.94, 0.006, 8, 160),
+  new THREE.MeshBasicMaterial({ color: new THREE.Color(0.35, 1.6, 2.0), toneMapped: false }));
+lip.rotation.x = Math.PI / 2; lip.position.y = 0.001; stage.add(lip);
+
+// HUD rings drawn by one shader: dashes, ticks and arcs that turn at different speeds
+const hudMat = new THREE.ShaderMaterial({
+  transparent: true, depthWrite: false, toneMapped: false, uniforms: { uTime: { value: 0 }, uCharge: { value: 1 } },
+  vertexShader: `varying vec2 vP; void main(){ vP=position.xy; gl_Position=projectionMatrix*modelViewMatrix*vec4(position,1.); }`,
+  fragmentShader: `uniform float uTime; uniform float uCharge; varying vec2 vP;
+    float ringL(float r,float c,float w){ return smoothstep(w,0.,abs(r-c)); }
+    void main(){
+      float r=length(vP); float a=atan(vP.y,vP.x); float t=uTime;
+      vec3 cyan=vec3(0.3,1.0,1.25), vio=vec3(0.7,0.55,1.4);
+      float v=0.;
+      v+=ringL(r,0.86,0.004)*0.8;
+      v+=ringL(r,0.80,0.006)*step(0.5,fract((a+t*0.15)*24./6.2832))*0.9;          // dashed ring
+      float ticks=step(0.82,fract(a*120./6.2832))*step(0.74,r)*step(r,0.77);
+      v+=ticks*0.5;
+      float arc=step(0.,sin(a*3.+t*-0.4))*ringL(r,0.70,0.010);                       // three arcs turning back
+      vec3 col=cyan*v+vio*arc*1.1;
+      // charging flow: light runs inward along the pad while charging
+      float flow=fract(r*3.0+t*0.8); float inner=smoothstep(0.62,0.4,r)*smoothstep(0.30,0.40,r);
+      col+=cyan*pow(flow,8.)*inner*0.9*uCharge;
+      float alpha=clamp(max(max(col.r,col.g),col.b),0.,1.);
+      gl_FragColor=vec4(col,alpha*0.9);
+    }`
+});
+const hud = new THREE.Mesh(new THREE.CircleGeometry(0.9, 128), hudMat);
+hud.rotation.x = -Math.PI / 2; hud.position.y = 0.0015; stage.add(hud);
+
+// soft light column rising from the pad rim
+const beam = new THREE.Mesh(new THREE.CylinderGeometry(0.93, 0.93, 1.4, 96, 1, true), new THREE.ShaderMaterial({
+  transparent: true, side: THREE.FrontSide, depthWrite: false, blending: THREE.AdditiveBlending,
+  uniforms: { uTime: { value: 0 } },
+  vertexShader: `varying vec2 vUv; void main(){ vUv=uv; gl_Position=projectionMatrix*modelViewMatrix*vec4(position,1.); }`,
+  fragmentShader: `uniform float uTime; varying vec2 vUv;
+    void main(){ float a=0.0;  // no fill: it would haze the pad; only thin rising lines
+      float lines=step(0.97,fract(vUv.x*48.0))*pow(1.0-vUv.y,3.0)*0.06;
+      gl_FragColor=vec4(vec3(0.3,0.9,1.0),a+lines); }`
+}));
+beam.position.y = 0.7; stage.add(beam);
+
+// particles drifting up inside the column
+const PN = 220, pPos = new Float32Array(PN * 3), pSeed = new Float32Array(PN);
+for (let i = 0; i < PN; i++) {
+  const a = Math.random() * Math.PI * 2, r = 0.45 + Math.random() * 0.48;
+  pPos.set([Math.cos(a) * r, Math.random() * 1.4, Math.sin(a) * r], i * 3); pSeed[i] = Math.random();
+}
+const pGeo = new THREE.BufferGeometry();
+pGeo.setAttribute('position', new THREE.BufferAttribute(pPos, 3));
+pGeo.setAttribute('aSeed', new THREE.BufferAttribute(pSeed, 1));
+const pMat = new THREE.ShaderMaterial({
+  transparent: true, depthWrite: false, blending: THREE.AdditiveBlending, uniforms: { uTime: { value: 0 }, uPx: { value: 1 } },
+  vertexShader: `uniform float uTime; uniform float uPx; attribute float aSeed; varying float vA;
+    void main(){ vec3 p=position; p.y=mod(p.y+uTime*(0.05+aSeed*0.08),1.4);
+      vA=smoothstep(0.,0.15,p.y)*smoothstep(1.4,0.6,p.y);
+      vec4 mv=modelViewMatrix*vec4(p,1.); gl_PointSize=uPx*(2.0+aSeed*2.5)*(3.0/-mv.z); gl_Position=projectionMatrix*mv; }`,
+  fragmentShader: `varying float vA; void main(){ float d=length(gl_PointCoord-0.5); gl_FragColor=vec4(vec3(0.5,1.0,1.2),vA*smoothstep(0.5,0.,d)*0.8); }`
+});
+stage.add(new THREE.Points(pGeo, pMat));
+
+// ---------------------------------------------------------------- robot
+let robot, J = {}, lamps = [], armRing = null;
+new GLTFLoader().setMeshoptDecoder(MeshoptDecoder).load(window.LUMI_GLB || 'lumi.glb', g => {
+  robot = g.scene;
+  robot.traverse(o => {
+    if (o.isMesh) { o.castShadow = o.receiveShadow = true; if (o.material.name === 'Lamp') { o.material.color.setHex(0x6cc8ff); o.material.emissive.setHex(0x2aa8ff); lamps.push(o.material); } }
+    if (o.name.startsWith('joint_') && o.children[0]) J[o.name.slice(6)] = o.children[0];
+    if (o.isMesh && o.material.name === 'BrandLogo') {   // printed logo: keep its own colours under the lights
+      const map = o.material.map;
+      map.anisotropy = renderer.capabilities.getMaxAnisotropy();   // stays sharp on the curved column
+      map.colorSpace = THREE.SRGBColorSpace; map.needsUpdate = true;
+      o.material = new THREE.MeshBasicMaterial({ map, transparent: true, alphaTest: 0.04, toneMapped: false,
+        depthWrite: false, polygonOffset: true, polygonOffsetFactor: -2 });
+    }
+    if (o.isMesh && o.name.startsWith('ring_shoulder')) {
+      o.material = new THREE.MeshBasicMaterial({ color: 0x000000, toneMapped: false });
+      armRing = o;
+    }
+  });
+  scene.add(robot);
+  applyState();
+  renderer.shadowMap.needsUpdate = true;
+  window.robot = robot; window.J = J;
+  window.ReactNativeWebView?.postMessage(JSON.stringify({ type: 'ready', ms: Math.round(performance.now()) }));
+}, undefined, e => {
+  document.getElementById('err').textContent = 'Model: ' + e;
+  window.ReactNativeWebView?.postMessage(JSON.stringify({ type: 'error', message: String(e) }));
+});
+function setJoint(name, v) {
+  const l = J[name]; if (!l) return;
+  if (name === 'l_1') l.position.y = v; else l.rotation.y = v;
+}
+
+// ---------------------------------------------------------------- robot state
+// The app feeds the live state here when Lumi is connected; the model shows exactly that.
+// arm: 'off' (no power, ring dark), 'disabled' (power on, not enabled: blue), 'enabled' (green),
+//      'error' (fault or protective stop: red), 'drag' (freedrive: yellow). Colours: JAKA manuals.
+const state = {
+  head: 0, neck: 0, waist: 0, lift: 0,                       // rad, rad, rad, m
+  arm: [0, 1.0, 0.5, 0, 1.57, 0],                            // J1..J6 rad
+  armState: 'off', charging: false,
+};
+const ARM_COLOR = { off: [0.02, 0.02, 0.02], disabled: [0.1, 0.45, 2.2], enabled: [0.15, 2.2, 0.55],
+                    error: [2.4, 0.12, 0.1], drag: [2.2, 1.6, 0.1] };
+const ARM_LABEL = { off: 'Arm off', disabled: 'Arm disabled', enabled: 'Arm enabled', error: 'Arm error', drag: 'Free drive' };
+const ARM_JOINTS = ['l_a1', 'l_a2', 'l_a3', 'l_a4', 'l_a5', 'l_a6'];
+function applyState() {
+  renderer.shadowMap.needsUpdate = true;
+  setJoint('l_3', state.head); setJoint('l_4', state.neck); setJoint('l_2', state.waist); setJoint('l_1', state.lift);
+  state.arm.forEach((v, i) => setJoint(ARM_JOINTS[i], v));
+  const c = ARM_COLOR[state.armState] || ARM_COLOR.off;
+  if (armRing) armRing.material.color.setRGB(...c);
+  const btn = document.getElementById('arm');
+  btn.innerHTML = `<i style="background:rgb(${c.map(x => Math.min(255, Math.round(x * 110))).join(',')})"></i>${ARM_LABEL[state.armState]}`;
+  document.getElementById('vHead').textContent = Math.round(state.head * 57.3) + '°';
+  document.getElementById('vWaist').textContent = Math.round(state.waist * 57.3) + '°';
+  document.getElementById('vLift').textContent = Math.round(state.lift * 1000) + ' mm';
+}
+// the app sends the robot's live state here (battery and charging come with it)
+let charging = state.charging;
+const chip = document.getElementById('charge');
+function applyHud() {
+  chip.textContent = charging ? 'Charging' : 'Not charging';
+  chip.classList.toggle('off', !charging);
+  const b = state.battery;
+  document.getElementById('vBatt').textContent = b == null ? '' : Math.round(b) + '%';
+  document.getElementById('vStatus').textContent = state.status || 'Ready';
+}
+window.lumi = { setState(s) { Object.assign(state, s); charging = !!state.charging; applyState(); applyHud(); }, state };
+try { if (location.hash.length > 1) Object.assign(state, JSON.parse(decodeURIComponent(location.hash.slice(1)))); } catch (e) {}
+applyHud();
+
+const clock = new THREE.Clock();
+let lastW = innerWidth, lastH = innerHeight;
+function resize() {
+  const w = innerWidth, h = innerHeight;
+  renderer.setSize(w, h, false);
+  camera.aspect = w / h; camera.updateProjectionMatrix();
+  // reframe only when the screen really changes (turning the phone), not when browser bars slide
+  if (Math.abs(h - lastH) > 120 || Math.abs(w - lastW) > 120) frameHome();
+  lastW = w; lastH = h;
+  pMat.uniforms.uPx.value = renderer.getPixelRatio() * h / 900;
+}
+addEventListener('resize', resize); resize();
+
+const camDir = new THREE.Vector3();
+let frames = 0, fpsSince = performance.now();
+function adaptQuality() {
+  frames++;
+  const now = performance.now(), span = now - fpsSince;
+  if (span < 2000) return;
+  const fps = frames * 1000 / span;
+  frames = 0; fpsSince = now;
+  window.ReactNativeWebView?.postMessage(JSON.stringify({ type: 'perf', fps: Math.round(fps), pixelRatio }));
+  const next = fps < 40 ? Math.max(PR_MIN, pixelRatio - 0.25) : fps > 57 ? Math.min(PR_MAX, pixelRatio + 0.25) : pixelRatio;
+  if (next !== pixelRatio) {
+    pixelRatio = next;
+    renderer.setPixelRatio(pixelRatio);
+    renderer.setSize(innerWidth, innerHeight, false);
+    pMat.uniforms.uPx.value = pixelRatio * innerHeight / 900;
+  }
+}
+renderer.setAnimationLoop(() => {
+  adaptQuality();
+  const t = clock.getElapsedTime();
+  for (const m of [sky.material, terrainMat, floorMat, hudMat, beam.material, pMat, city, planet.material]) m.uniforms.uTime.value = t;
+  hudMat.uniforms.uCharge.value = THREE.MathUtils.lerp(hudMat.uniforms.uCharge.value, charging ? 1 : 0, 0.05);
+  // the planet rig follows the view round, so the planet stays in the sky behind the robot
+  camera.getWorldDirection(camDir);
+  planetRig.rotation.y = Math.atan2(-camDir.x, -camDir.z);
+  planetRig.rotation.x = Math.asin(THREE.MathUtils.clamp(camDir.y, -1, 1));
+  planet.rotation.y = t * 0.01;
+  lip.material.color.setRGB(0.35, 1.6 + 0.3 * Math.sin(t * 2), 2.0);
+  const lampOn = charging ? 0.1 + 1.6 * Math.pow(0.5 + 0.5 * Math.sin(t * 2.6), 2) : 1.5;
+  for (const m of lamps) m.emissiveIntensity = lampOn;
+  updateView();
+  controls.update();
+  renderer.render(scene, camera);
+});
+</script>
+</body>
+</html>
