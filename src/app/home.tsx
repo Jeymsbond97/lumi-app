@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, type ComponentType, type Ref } from 'react';
+import { useEffect, useMemo, useRef, useState, type ComponentType, type Ref } from 'react';
 import { StyleSheet, View } from 'react-native';
 import Animated, { FadeOut } from 'react-native-reanimated';
 import { router } from 'expo-router';
@@ -25,6 +25,16 @@ interface ModelSource {
   baseUrl: string;
 }
 
+/**
+ * The page's settings are written into its <head> as the first script, so they exist before the scene module runs.
+ * injectedJavaScriptBeforeContentLoaded is not early enough on Android: the scene then asked Metro for `lumi.glb`,
+ * got the Expo manifest back, and GLTFLoader failed with "Unsupported asset".
+ */
+function sceneHtml(glbUri: string): string {
+  const settings = `<script>document.documentElement.classList.add('in-app');window.LUMI_GLB=${JSON.stringify(glbUri).replace(/</g, '\\u003c')};</script>`;
+  return SCENE_HTML.replace('<head>', `<head>${settings}`);
+}
+
 async function loadModel(): Promise<ModelSource> {
   // eslint-disable-next-line @typescript-eslint/no-require-imports -- Metro bundles assets through require
   const asset = Asset.fromModule(require('../../assets/model/lumi.glb'));
@@ -43,6 +53,7 @@ export default function Home() {
   const [model, setModel] = useState<ModelSource | null>(null);
   const [sceneReady, setSceneReady] = useState(false);
   const [status, setStatus] = useState<RobotStatus | null>(null);
+  const html = useMemo(() => (model ? sceneHtml(model.glbUri) : ''), [model]);
 
   useEffect(() => {
     loadModel().then(setModel, (e) => console.warn('model', e));
@@ -119,8 +130,7 @@ export default function Home() {
           ref={web}
           style={styles.web}
           originWhitelist={['*']}
-          source={{ html: SCENE_HTML, baseUrl: model.baseUrl }}
-          injectedJavaScriptBeforeContentLoaded={`document.documentElement.classList.add('in-app'); window.LUMI_GLB = ${JSON.stringify(model.glbUri)}; true;`}
+          source={{ html, baseUrl: model.baseUrl }}
           onMessage={onMessage}
           allowFileAccess
           allowFileAccessFromFileURLs
