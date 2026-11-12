@@ -13,16 +13,16 @@ describe('padToJog', () => {
     expect(padToJog(0, 60, 100)).toEqual([{ axis: 'base_drive', direction: -1, speed: 0.55 }]);
   });
 
-  it('turns right (negative, clockwise) when pushed right, and left when pushed left', () => {
-    expect(padToJog(100, 0, 100)).toEqual([{ axis: 'base_turn', direction: -1, speed: 1 }]);
-    expect(padToJog(-100, 0, 100)).toEqual([{ axis: 'base_turn', direction: 1, speed: 1 }]);
+  it('turns right when pushed right and left when pushed left (positive base_turn is right on Lumi)', () => {
+    expect(padToJog(100, 0, 100)).toEqual([{ axis: 'base_turn', direction: 1, speed: 1 }]);
+    expect(padToJog(-100, 0, 100)).toEqual([{ axis: 'base_turn', direction: -1, speed: 1 }]);
   });
 
   it('drives and turns on a diagonal', () => {
     const cmds = padToJog(50, -50, 100);
     expect(cmds.map((c) => [c.axis, c.direction])).toEqual([
       ['base_drive', 1],
-      ['base_turn', -1],
+      ['base_turn', 1],
     ]);
   });
 

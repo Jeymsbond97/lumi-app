@@ -1,6 +1,7 @@
 // Joystick to base motion. The robot (lumi-wave api/control.py) drives the base while /jog is called about every
 // 150 ms and stops by itself 0.35 s after the last call; base_drive and base_turn are joined into one motion there.
-// Top speed there: 0.3 m/s forward or back, 0.6 rad/s turning; a positive turn is to the left (counter clockwise).
+// Top speed there: 0.3 m/s forward or back, 0.6 rad/s turning. On Lumi a positive base_turn turns RIGHT (clockwise):
+// checked on the robot 2026-11-13, the joystick pushed left with -1 turned it right.
 
 export interface AxisCommand {
   axis: 'base_drive' | 'base_turn';
@@ -35,5 +36,5 @@ function axis(name: AxisCommand['axis'], v: number): AxisCommand | null {
 export function padToJog(x: number, y: number, radius: number): AxisCommand[] {
   if (radius <= 0) return [];
   const { x: cx, y: cy } = clampToPad(x, y, radius);
-  return [axis('base_drive', -cy / radius), axis('base_turn', -cx / radius)].filter((c): c is AxisCommand => c !== null);
+  return [axis('base_drive', -cy / radius), axis('base_turn', cx / radius)].filter((c): c is AxisCommand => c !== null);
 }
