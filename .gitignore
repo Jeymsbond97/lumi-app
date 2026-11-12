@@ -9,3 +9,29 @@ android/
 .env.*
 .DS_Store
 PLAN.md
+.superpowers/
+
+# Blender model pipeline: work files and the uncompressed export
+# (the app ships the compressed copy in assets/model/lumi.glb)
+tools/lumi-model/work/
+tools/lumi-model/out/
+
+# Expo
+expo-env.d.ts
+.kotlin/
+.metro-health-check*
+*.tsbuildinfo
+
+# Signing keys
+*.orig.*
+*.jks
+*.p8
+*.p12
+*.key
+*.pem
+*.mobileprovision
+
+# Debug logs
+npm-debug.*
+yarn-debug.*
+yarn-error.*
