@@ -1,23 +1,19 @@
 import { useEffect, useMemo, useRef, useState, type ComponentType, type Ref } from 'react';
 import { StyleSheet, View } from 'react-native';
 import Animated, { FadeOut } from 'react-native-reanimated';
-import { router } from 'expo-router';
 import { Asset } from 'expo-asset';
 import { WebView, type WebViewMessageEvent, type WebViewProps } from 'react-native-webview';
-import { SCENE_HTML } from '../scene/sceneHtml';
-import { getArmJoints, getStatus, type RobotStatus } from '../lib/api';
-import { toSceneState, type SceneState } from '../scene/sceneState';
-import { RobotHud } from '../ui/RobotHud';
-import { session } from '../lib/session';
-import { colors } from '../ui/theme';
-import { ConnectingView } from '../ui/ConnectingView';
+import { SCENE_HTML } from '../../scene/sceneHtml';
+import { toSceneState, type SceneState } from '../../scene/sceneState';
+import { RobotHud } from '../../ui/RobotHud';
+import { Joystick } from '../../ui/Joystick';
+import { useRobot } from '../../lib/robot';
+import { colors } from '../../ui/theme';
+import { ConnectingView } from '../../ui/ConnectingView';
 
 // react-native-webview 14 class typings resolve to `never` under React Native 0.88's strict TS API;
 // the runtime component is fine, so it is given its documented props here.
 const SceneView = WebView as unknown as ComponentType<WebViewProps & { ref?: Ref<WebView> }>;
-
-const POLL_MS = 1000;
-const LOST_AFTER_FAILS = 3;
 
 interface ModelSource {
   glbUri: string;
@@ -37,7 +33,7 @@ function sceneHtml(glbUri: string): string {
 
 async function loadModel(): Promise<ModelSource> {
   // eslint-disable-next-line @typescript-eslint/no-require-imports -- Metro bundles assets through require
-  const asset = Asset.fromModule(require('../../assets/model/lumi.glb'));
+  const asset = Asset.fromModule(require('../../../assets/model/lumi.glb'));
   // while developing, the model comes from the Metro server; in a built app it is a local file
   if (asset.uri.startsWith('http')) {
     const origin = asset.uri.match(/^https?:\/\/[^/]+/)?.[0] ?? asset.uri;
@@ -52,7 +48,7 @@ export default function Home() {
   const web = useRef<WebView>(null);
   const [model, setModel] = useState<ModelSource | null>(null);
   const [sceneReady, setSceneReady] = useState(false);
-  const [status, setStatus] = useState<RobotStatus | null>(null);
+  const { status, joints } = useRobot();
   const html = useMemo(() => (model ? sceneHtml(model.glbUri) : ''), [model]);
 
   useEffect(() => {
@@ -74,42 +70,10 @@ export default function Home() {
     if (sceneReady && lastScene.current) pushScene(lastScene.current);
   }, [sceneReady]);
 
+  // the robot's pose follows every reply the layout gets
   useEffect(() => {
-    const conn = session.connection;
-    if (!conn) {
-      router.replace('/');
-      return;
-    }
-    let fails = 0;
-    let alive = true;
-    let timer: ReturnType<typeof setTimeout> | undefined;
-
-    // one request after another, never piling up when the robot is slow to answer
-    const tick = async () => {
-      const started = Date.now();
-      try {
-        const st = await getStatus(conn.baseUrl);
-        const joints = st.armState === 'off' ? null : await getArmJoints(conn.baseUrl).catch(() => null);
-        fails = 0;
-        if (!alive) return;
-        setStatus(st);
-        pushScene(toSceneState(st, joints));
-      } catch {
-        fails += 1;
-        if (alive && fails >= LOST_AFTER_FAILS) {
-          session.set(null);
-          router.replace('/');
-          return;
-        }
-      }
-      if (alive) timer = setTimeout(tick, Math.max(0, POLL_MS - (Date.now() - started)));
-    };
-    tick();
-    return () => {
-      alive = false;
-      if (timer) clearTimeout(timer);
-    };
-  }, []);
+    if (status) pushScene(toSceneState(status, joints));
+  }, [status, joints]);
 
   const onMessage = (e: WebViewMessageEvent) => {
     try {
@@ -143,7 +107,8 @@ export default function Home() {
           mixedContentMode="always"
         />
       )}
-      <RobotHud status={status} />
+      <RobotHud />
+      <Joystick />
       {/* Lumi keeps looking at you until the 3D robot is drawn, then the scene shows through */}
       {!sceneReady && (
         <Animated.View style={StyleSheet.absoluteFill} exiting={FadeOut.duration(450)} pointerEvents="none">
