@@ -1,7 +1,7 @@
 // Finds Lumi's API on whichever network the phone or tablet is on.
 // The robot Wi-Fi is tried first because that is how people normally connect next to the robot.
 
-export type Route = 'robot-wifi' | 'office' | 'remote';
+export type Route = 'robot-wifi' | 'office' | 'remote' | 'usb';
 
 export interface Candidate {
   route: Route;
@@ -12,6 +12,8 @@ export const CANDIDATES: Candidate[] = [
   { route: 'robot-wifi', baseUrl: 'http://192.168.10.240:8100' },
   { route: 'office', baseUrl: 'http://192.168.0.250:8100' },
   { route: 'remote', baseUrl: 'http://100.74.120.24:8100' }, // Tailscale, lumi-thor
+  // Development only: `npm run usb` forwards the robot API through adb, for a device or emulator without network.
+  ...(__DEV__ ? [{ route: 'usb' as const, baseUrl: 'http://127.0.0.1:8100' }] : []),
 ];
 
 export interface Connection extends Candidate {

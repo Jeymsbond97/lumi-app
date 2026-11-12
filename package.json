@@ -45,7 +45,8 @@
     "scene": "node scripts/build-scene.mjs",
     "typecheck": "tsc --noEmit",
     "lint": "expo lint",
-    "test": "jest"
+    "test": "jest",
+    "usb": "node scripts/usb-bridge.mjs"
   },
   "private": true,
   "jest": {
