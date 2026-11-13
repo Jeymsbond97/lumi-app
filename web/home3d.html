@@ -410,7 +410,8 @@ function setJoint(name, v) {
 // arm: 'off' (no power, ring dark), 'disabled' (power on, not enabled: blue), 'enabled' (green),
 //      'error' (fault or protective stop: red), 'drag' (freedrive: yellow). Colours: JAKA manuals.
 const state = {
-  head: 0, neck: 0, waist: 0, lift: 0,                       // rad, rad, rad, m
+  // until the body's angles are known: its rest, the head at its bottom stop (API pitch -5°, +l_4 is down)
+  head: 0, neck: 5 * Math.PI / 180, waist: 0, lift: 0,       // rad, rad, rad, m
   arm: [0, 1.0, 0.5, 0, 1.57, 0],                            // J1..J6 rad
   armState: 'off', charging: false,
 };
