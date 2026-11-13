@@ -5,7 +5,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import Svg, { Circle, Ellipse, Path } from 'react-native-svg';
 import Animated, { FadeIn, FadeOut } from 'react-native-reanimated';
 import { LANGS, useI18n } from '../lib/i18n';
-import { fonts } from './theme';
+import { fonts, mono } from './theme';
 
 function Globe({ size, color }: { size: number; color: string }) {
   return (
@@ -34,7 +34,7 @@ export function LanguageButton() {
         accessibilityLabel={t('language')}
         style={({ pressed }) => [styles.button, { top, right }, pressed && styles.pressed]}
       >
-        <Globe size={18} color="#c9d6dd" />
+        <Globe size={18} color={mono.text} />
       </Pressable>
       {open && (
         <Animated.View entering={FadeIn.duration(150)} exiting={FadeOut.duration(120)} style={[styles.menu, { top: top + 44, right }]}>
@@ -68,9 +68,9 @@ const styles = StyleSheet.create({
     borderRadius: 18,
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: 'rgba(14,20,26,0.7)',
-    borderWidth: 1,
-    borderColor: 'rgba(160,190,205,0.18)',
+    backgroundColor: mono.glass,
+    borderWidth: 1.5,
+    borderColor: mono.dim,
   },
   pressed: { opacity: 0.6 },
   menu: {
@@ -78,14 +78,14 @@ const styles = StyleSheet.create({
     minWidth: 160,
     paddingVertical: 8,
     borderRadius: 14,
-    backgroundColor: 'rgba(12,17,22,0.96)',
+    backgroundColor: 'rgba(8,8,8,0.96)',
     borderWidth: 1,
-    borderColor: 'rgba(160,190,205,0.16)',
+    borderColor: mono.dim,
   },
-  menuTitle: { fontFamily: fonts.medium, fontSize: 12, color: '#6f818c', paddingHorizontal: 14, paddingBottom: 4 },
+  menuTitle: { fontFamily: fonts.mono, fontSize: 12, color: mono.soft, paddingHorizontal: 14, paddingBottom: 4, letterSpacing: 1, textTransform: 'uppercase' },
   item: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 14, paddingVertical: 10 },
-  itemText: { fontFamily: fonts.body, fontSize: 15, color: '#c9d6dd' },
-  itemActive: { fontFamily: fonts.semibold, color: '#eef2f5' },
+  itemText: { fontFamily: fonts.mono, fontSize: 15, color: mono.soft },
+  itemActive: { fontFamily: fonts.monoBold, color: mono.text },
   check: { width: 8, height: 8, borderRadius: 4, marginLeft: 16 },
-  checkOn: { backgroundColor: '#7fe0a6' },
+  checkOn: { backgroundColor: mono.red },
 });

@@ -8,20 +8,11 @@ import { MODE_TEXT, MODES, setMode, type Mode } from '../lib/api';
 import { useI18n } from '../lib/i18n';
 import { useRobot } from '../lib/robot';
 import { stopSize } from './StopButton';
-import { clamp, fonts } from './theme';
+import { clamp, fonts, mono } from './theme';
 
+/** Style D: an empty ring when off, a filled red dot when on. */
 function Switch({ on, size }: { on: boolean; size: number }) {
-  return (
-    <View style={[styles.track, { width: size * 1.8, height: size, borderRadius: size / 2 }, on && styles.trackOn]}>
-      <View
-        style={[
-          styles.knob,
-          { width: size - 6, height: size - 6, borderRadius: (size - 6) / 2, left: on ? size * 1.8 - size + 3 : 3 },
-          on && styles.knobOn,
-        ]}
-      />
-    </View>
-  );
+  return <View style={[styles.radio, { width: size, height: size, borderRadius: size / 2 }, on && styles.radioOn]} />;
 }
 
 export function ModesPanel() {
@@ -32,7 +23,7 @@ export function ModesPanel() {
   const [busy, setBusy] = useState<Mode | null>(null);
   const [failed, setFailed] = useState(false);
   const text = clamp(12, 0.02 * h, 16);
-  const sw = clamp(18, 0.03 * h, 24);
+  const sw = clamp(14, 0.024 * h, 18);
 
   if (!modes) return null;
 
@@ -64,8 +55,8 @@ export function ModesPanel() {
         >
           <Text style={[styles.label, { fontSize: text }, modes[m] && styles.labelOn]}>{t(MODE_TEXT[m])}</Text>
           {busy === m ? (
-            <View style={{ width: sw * 1.8, height: sw, justifyContent: 'center' }}>
-              <ActivityIndicator size="small" color="#7fe0a6" />
+            <View style={{ width: sw, height: sw, justifyContent: 'center', alignItems: 'center' }}>
+              <ActivityIndicator size="small" color={mono.text} />
             </View>
           ) : (
             <Switch on={modes[m]} size={sw} />
@@ -83,18 +74,16 @@ const styles = StyleSheet.create({
     paddingHorizontal: 14,
     paddingVertical: 10,
     borderRadius: 16,
-    backgroundColor: 'rgba(10,15,20,0.72)',
+    backgroundColor: 'rgba(0,0,0,0.55)',
     borderWidth: 1,
-    borderColor: 'rgba(160,190,205,0.14)',
+    borderColor: 'rgba(232,232,232,0.14)',
   },
-  title: { fontFamily: fonts.medium, color: '#6f818c', marginBottom: 2 },
+  title: { fontFamily: fonts.mono, color: mono.soft, marginBottom: 2, letterSpacing: 1, textTransform: 'uppercase' },
   row: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
   pressed: { opacity: 0.6 },
-  label: { fontFamily: fonts.body, color: '#a9b8c1' },
-  labelOn: { fontFamily: fonts.semibold, color: '#eef2f5' },
-  track: { backgroundColor: '#1d262d', justifyContent: 'center' },
-  trackOn: { backgroundColor: '#1f6b43' },
-  knob: { position: 'absolute', backgroundColor: '#6f818c' },
-  knobOn: { backgroundColor: '#9ff0bf' },
-  error: { fontFamily: fonts.body, color: '#ff8a80', marginTop: 4 },
+  label: { fontFamily: fonts.mono, color: mono.soft, letterSpacing: 1, textTransform: 'uppercase' },
+  labelOn: { fontFamily: fonts.monoBold, color: mono.text },
+  radio: { borderWidth: 1.5, borderColor: mono.text },
+  radioOn: { backgroundColor: mono.red, borderColor: mono.red },
+  error: { fontFamily: fonts.mono, color: mono.red, marginTop: 4 },
 });

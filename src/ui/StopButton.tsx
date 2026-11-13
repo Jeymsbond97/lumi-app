@@ -8,7 +8,7 @@ import Animated, { FadeIn, FadeOut } from 'react-native-reanimated';
 import { stopAll } from '../lib/api';
 import { useI18n } from '../lib/i18n';
 import { useRobot } from '../lib/robot';
-import { clamp, fonts } from './theme';
+import { clamp, fonts, mono } from './theme';
 
 const NOTE_MS = 2500;
 
@@ -61,8 +61,8 @@ export function StopButton() {
           pressed && styles.pressed,
         ]}
       >
-        {/* Unbounded has no Hangul: Korean uses the system font, bold */}
-        <Text style={[lang === 'en' ? styles.label : styles.labelSystem, { fontSize: size * (lang === 'en' ? 0.2 : 0.24) }]}>{t('stop')}</Text>
+        {/* Doto has no Hangul: Korean uses the system font, bold */}
+        <Text style={[lang === 'en' ? styles.label : styles.labelSystem, { fontSize: size * 0.24 }]}>{t('stop')}</Text>
       </Pressable>
     </View>
   );
@@ -73,26 +73,24 @@ const styles = StyleSheet.create({
   button: {
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: '#e5484d',
-    borderWidth: 3,
-    borderColor: 'rgba(255,255,255,0.22)',
-    shadowColor: '#ff3b30',
+    backgroundColor: mono.red,
+    shadowColor: mono.red,
     shadowOpacity: 0.55,
     shadowRadius: 16,
     shadowOffset: { width: 0, height: 0 },
     elevation: 10,
   },
-  pressed: { backgroundColor: '#b8262c', transform: [{ scale: 0.95 }] },
-  label: { fontFamily: fonts.title, color: '#fff', letterSpacing: 1 },
-  labelSystem: { fontWeight: '800', color: '#fff' },
+  pressed: { backgroundColor: '#b81f1f', transform: [{ scale: 0.95 }] },
+  label: { fontFamily: fonts.dot, color: '#000', letterSpacing: 1 },
+  labelSystem: { fontWeight: '800', color: '#000' },
   note: {
     paddingHorizontal: 12,
     paddingVertical: 6,
     borderRadius: 999,
-    backgroundColor: 'rgba(12,17,22,0.9)',
+    backgroundColor: 'rgba(0,0,0,0.85)',
     borderWidth: 1,
-    borderColor: 'rgba(160,190,205,0.16)',
+    borderColor: mono.dim,
   },
-  noteText: { fontFamily: fonts.medium, fontSize: 14, color: '#eef2f5' },
-  noteBad: { color: '#ff8a80' },
+  noteText: { fontFamily: fonts.mono, fontSize: 14, color: mono.text, textTransform: 'uppercase' },
+  noteBad: { color: mono.red },
 });

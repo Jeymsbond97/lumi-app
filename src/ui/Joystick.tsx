@@ -10,7 +10,7 @@ import { BusyError, jog, jogStop } from '../lib/api';
 import { clampToPad, padToJog, type AxisCommand } from '../lib/drive';
 import { useI18n } from '../lib/i18n';
 import { useRobot } from '../lib/robot';
-import { clamp, fonts } from './theme';
+import { clamp, fonts, mono } from './theme';
 
 const SEND_MS = 150; // the robot keeps an axis going 0.35 s after each command
 const NOTE_MS = 2500;
@@ -27,7 +27,7 @@ function Arrows({ size }: { size: number }) {
   };
   return (
     <Svg width={size} height={size} style={StyleSheet.absoluteFill} pointerEvents="none">
-      <Path d={[tri(0, -1), tri(0, 1), tri(-1, 0), tri(1, 0)].join(' ')} fill="rgba(201,214,221,0.45)" />
+      <Path d={[tri(0, -1), tri(0, 1), tri(-1, 0), tri(1, 0)].join(' ')} fill="rgba(232,232,232,0.4)" />
     </Svg>
   );
 }
@@ -154,27 +154,24 @@ export function Joystick() {
 
 const styles = StyleSheet.create({
   root: { position: 'absolute', alignItems: 'flex-start', gap: 10 },
+  // style D: a dashed ring with a solid white knob
   pad: {
-    backgroundColor: 'rgba(10,15,20,0.6)',
+    backgroundColor: 'rgba(0,0,0,0.35)',
     borderWidth: 1.5,
-    borderColor: 'rgba(160,190,205,0.22)',
+    borderStyle: 'dashed',
+    borderColor: '#6a6a6a',
   },
-  padHeld: { borderColor: 'rgba(127,224,166,0.55)' },
-  knob: {
-    position: 'absolute',
-    backgroundColor: 'rgba(201,214,221,0.28)',
-    borderWidth: 1.5,
-    borderColor: 'rgba(238,242,245,0.5)',
-  },
-  knobHeld: { backgroundColor: 'rgba(127,224,166,0.45)', borderColor: '#9ff0bf' },
+  padHeld: { borderColor: mono.text },
+  knob: { position: 'absolute', backgroundColor: mono.text },
+  knobHeld: { backgroundColor: mono.red },
   note: {
-    fontFamily: fonts.medium,
+    fontFamily: fonts.mono,
     fontSize: 14,
-    color: '#ffcf33',
+    color: mono.yellow,
     paddingHorizontal: 12,
     paddingVertical: 6,
     borderRadius: 999,
-    backgroundColor: 'rgba(12,17,22,0.9)',
+    backgroundColor: 'rgba(0,0,0,0.85)',
     overflow: 'hidden',
   },
 });

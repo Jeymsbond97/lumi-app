@@ -8,7 +8,7 @@ import * as Haptics from 'expo-haptics';
 import { isEnded, stepText, taskButtons, taskCommand, type TaskCommand, type TaskPhase } from '../lib/api';
 import { useI18n, type TextKey } from '../lib/i18n';
 import { useRobot } from '../lib/robot';
-import { clamp, fonts } from './theme';
+import { clamp, fonts, mono } from './theme';
 
 const PHASE_TEXT: Record<TaskPhase, TextKey> = {
   running: 'taskRunning',
@@ -94,18 +94,18 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16,
     paddingVertical: 12,
     borderRadius: 18,
-    backgroundColor: 'rgba(10,15,20,0.78)',
+    backgroundColor: 'rgba(0,0,0,0.6)',
     borderWidth: 1,
-    borderColor: 'rgba(160,190,205,0.16)',
+    borderColor: 'rgba(232,232,232,0.16)',
   },
   row: { flexDirection: 'row', alignItems: 'center', flexWrap: 'wrap' },
   dot: { borderRadius: 99 },
-  phase: { fontFamily: fonts.semibold, color: '#eef2f5' },
-  step: { fontFamily: fonts.body, color: '#a9b8c1' },
-  button: { borderRadius: 999, backgroundColor: '#1d262d', borderWidth: 1, borderColor: '#2c3942' },
-  buttonStop: { backgroundColor: '#5a1d20', borderColor: '#8a2c31' },
-  buttonRelease: { backgroundColor: '#1f4a5e', borderColor: '#2c6a85' },
+  phase: { fontFamily: fonts.monoBold, color: mono.text, letterSpacing: 1, textTransform: 'uppercase' },
+  step: { fontFamily: fonts.mono, color: mono.soft },
+  button: { borderRadius: 999, borderWidth: 1.5, borderColor: mono.text },
+  buttonStop: { backgroundColor: mono.red, borderColor: mono.red },
+  buttonRelease: { borderColor: mono.blue },
   pressed: { opacity: 0.6 },
-  buttonText: { fontFamily: fonts.medium, color: '#eef2f5' },
-  error: { fontFamily: fonts.body, color: '#ff8a80' },
+  buttonText: { fontFamily: fonts.mono, color: mono.text, letterSpacing: 1, textTransform: 'uppercase' },
+  error: { fontFamily: fonts.mono, color: mono.red },
 });
