@@ -5,11 +5,11 @@ import { Asset } from 'expo-asset';
 import { WebView, type WebViewMessageEvent, type WebViewProps } from 'react-native-webview';
 import { SCENE_HTML } from '../../scene/sceneHtml';
 import { toSceneState, type SceneState } from '../../scene/sceneState';
-import { RobotHud } from '../../ui/RobotHud';
 import { Joystick } from '../../ui/Joystick';
 import { useRobot } from '../../lib/robot';
 import { colors } from '../../ui/theme';
 import { ConnectingView } from '../../ui/ConnectingView';
+import { useLanding } from '../../lib/landing';
 
 // react-native-webview 14 class typings resolve to `never` under React Native 0.88's strict TS API;
 // the runtime component is fine, so it is given its documented props here.
@@ -49,6 +49,7 @@ export default function Home() {
   const [model, setModel] = useState<ModelSource | null>(null);
   const [sceneReady, setSceneReady] = useState(false);
   const { status, joints } = useRobot();
+  const { done: landingDone } = useLanding();
   const html = useMemo(() => (model ? sceneHtml(model.glbUri) : ''), [model]);
 
   useEffect(() => {
@@ -65,6 +66,11 @@ export default function Home() {
   };
 
   // the scene may finish loading after the first reply; give it what is already known
+  // the controls on top of the screen appear once the robot is drawn
+  useEffect(() => {
+    if (sceneReady) landingDone();
+  }, [sceneReady, landingDone]);
+
   useEffect(() => {
     sceneReadyRef.current = sceneReady;
     if (sceneReady && lastScene.current) pushScene(lastScene.current);
@@ -107,7 +113,6 @@ export default function Home() {
           mixedContentMode="always"
         />
       )}
-      <RobotHud />
       <Joystick />
       {/* Lumi keeps looking at you until the 3D robot is drawn, then the scene shows through */}
       {!sceneReady && (
