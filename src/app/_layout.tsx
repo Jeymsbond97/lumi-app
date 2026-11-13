@@ -9,6 +9,8 @@ import {
   HankenGrotesk_500Medium,
   HankenGrotesk_600SemiBold,
 } from '@expo-google-fonts/hanken-grotesk';
+import { Doto_900Black } from '@expo-google-fonts/doto';
+import { JetBrainsMono_400Regular, JetBrainsMono_600SemiBold } from '@expo-google-fonts/jetbrains-mono';
 import { colors } from '../ui/theme';
 import { I18nProvider } from '../lib/i18n';
 import { LanguageButton } from '../ui/LanguageButton';
@@ -21,6 +23,9 @@ export default function RootLayout() {
     HankenGrotesk_400Regular,
     HankenGrotesk_500Medium,
     HankenGrotesk_600SemiBold,
+    Doto_900Black,
+    JetBrainsMono_400Regular,
+    JetBrainsMono_600SemiBold,
   });
 
   useEffect(() => {
