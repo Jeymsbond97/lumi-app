@@ -18,6 +18,8 @@ interface RawStatus {
     waist_deg?: number;
     head_yaw_deg?: number;
     head_pitch_deg?: number;
+    /** All four joints enabled; missing from APIs older than /body/enable. */
+    enabled?: boolean;
   };
   arm?: Failed & { power?: boolean; enable?: boolean };
 }
@@ -43,7 +45,15 @@ export interface Body {
   waistDeg: number;
   headYawDeg: number;
   headPitchDeg: number;
+  /** null when the robot's API does not say (older than /body/enable). */
+  enabled: boolean | null;
 }
+
+/**
+ * The body's angles can be trusted only while it is enabled: after a controller power cycle the joints are disabled
+ * and read values the real robot is not at (head pitch -28°, under its -5° stop, seen 2026-11-13).
+ */
+export const bodyPoseKnown = (body: Body | null): body is Body => !!body && body.enabled !== false;
 
 export interface RobotStatus {
   battery: number | null;
@@ -67,7 +77,13 @@ export function toStatus(raw: RawStatus): RobotStatus {
     status: base.error ? 'statusBaseOffline' : moving ? 'statusMoving' : 'statusReady',
     body:
       !b.error && num(b.lift_mm) && num(b.waist_deg) && num(b.head_yaw_deg) && num(b.head_pitch_deg)
-        ? { liftMm: b.lift_mm, waistDeg: b.waist_deg, headYawDeg: b.head_yaw_deg, headPitchDeg: b.head_pitch_deg }
+        ? {
+            liftMm: b.lift_mm,
+            waistDeg: b.waist_deg,
+            headYawDeg: b.head_yaw_deg,
+            headPitchDeg: b.head_pitch_deg,
+            enabled: typeof b.enabled === 'boolean' ? b.enabled : null,
+          }
         : null,
     // powered but not enabled shows blue on the real ring, enabled green, no power dark
     armState: arm.error || !arm.power ? 'off' : arm.enable ? 'enabled' : 'disabled',
@@ -218,6 +234,15 @@ export const stopAll = (baseUrl: string) => post(baseUrl, '/stop');
 export async function setMode(baseUrl: string, mode: Mode, on: boolean): Promise<Modes> {
   return toModes((await post(baseUrl, '/assistant/modes', { [mode]: on }, 10000)) as RawModes);
 }
+
+/** Lift, waist and head (all four body joints) enabled or disabled. */
+export const setBodyEnabled = (baseUrl: string, on: boolean) => post(baseUrl, '/body/enable', { on }, 15000);
+
+/** Arm power on or off. The controller must be up; with the power on the ring light turns blue. */
+export const setArmPower = (baseUrl: string, on: boolean) => post(baseUrl, '/arm/power', { on }, 15000);
+
+/** Arm servos on or off; the arm must have power. Off, it holds by its brakes. */
+export const setArmEnabled = (baseUrl: string, on: boolean) => post(baseUrl, '/arm/enable', { on }, 10000);
 
 export const taskCommand = (baseUrl: string, cmd: TaskCommand) => post(baseUrl, `/tasks/${cmd}`);
 

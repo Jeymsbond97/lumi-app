@@ -1,104 +1,236 @@
-// On every screen after the loading screen: the name top left, and top centre one glass bar with the state, the arm,
-// and head, waist and lift (these only while the head and lift controller answers; no empty placeholders).
+// On every screen after the loading screen (style D): the name in dot matrix top left with the state under it,
+// top centre the body and arm power (tapping the body enables or disables it; tapping the arm powers it on, enables,
+// disables or powers it off; each asks first), and on the right under the battery
+// head, waist and lift (only while the head and lift controller answers; no empty placeholders).
 // Battery: BatteryBadge, top right.
-import { StyleSheet, Text, useWindowDimensions, View } from 'react-native';
+import { useEffect, useState } from 'react';
+import { ActivityIndicator, Alert, Pressable, StyleSheet, Text, useWindowDimensions, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { ARM_TEXT, type ArmState } from '../lib/api';
+import * as Haptics from 'expo-haptics';
+import { ARM_TEXT, bodyPoseKnown, setArmEnabled, setArmPower, setBodyEnabled, type ArmState, type Body } from '../lib/api';
 import type { TextKey } from '../lib/i18n';
 import { useI18n } from '../lib/i18n';
 import { useRobot } from '../lib/robot';
-import { clamp, fonts } from './theme';
+import { clamp, fonts, mono } from './theme';
+
+const NOTE_MS = 2500;
+const BUSY_MAX_MS = 8000;
 
 // same colours as the ring on the robot's shoulder in the 3D scene
 export const ARM_DOT: Record<ArmState, string> = {
-  off: '#2a2f35',
-  disabled: '#2f8cff',
-  enabled: '#33d17a',
-  error: '#ff5a52',
-  drag: '#ffcf33',
+  off: mono.dim,
+  disabled: mono.blue,
+  enabled: mono.green,
+  error: mono.red,
+  drag: mono.yellow,
 };
 
 const STATE_DOT: Partial<Record<TextKey, string>> = {
-  statusReady: '#7fe0a6',
-  statusMoving: '#7fd6ff',
-  statusBaseOffline: '#ff5a52',
+  statusReady: mono.green,
+  statusMoving: mono.blue,
+  statusBaseOffline: mono.red,
 };
+
 
 export function StatusHud() {
   const { t } = useI18n();
-  const { status } = useRobot();
+  const { connection, status } = useRobot();
   const { height: h } = useWindowDimensions();
   const inset = useSafeAreaInsets();
-  const nameSize = clamp(18, 0.044 * h, 36);
-  const rowSize = clamp(11, 0.021 * h, 18);
-  const smallSize = clamp(11, 0.019 * h, 16);
+  // the state of the part when a switch was sent: its chip spins until the robot reports a different one
+  const [sentFrom, setSentFrom] = useState<{ part: 'arm' | 'body'; from: string } | null>(null);
+  const [note, setNote] = useState<TextKey | null>(null);
+  const nameSize = clamp(26, 0.07 * h, 56);
+  const small = clamp(11, 0.019 * h, 15);
   const arm = status?.armState ?? 'off';
+  const body = status?.body ?? null;
+  const bodyNow = bodyState(body);
+  const busyArm = sentFrom?.part === 'arm' && sentFrom.from === arm;
+  const busyBody = sentFrom?.part === 'body' && sentFrom.from === bodyNow;
 
-  const body = status?.body;
-  const sep = <View style={[styles.sep, { height: smallSize * 1.1 }]} />;
+  useEffect(() => {
+    if (!note) return;
+    const id = setTimeout(() => setNote(null), NOTE_MS);
+    return () => clearTimeout(id);
+  }, [note]);
+
+  // if the robot never reports the change, the chip stops waiting after a while
+  useEffect(() => {
+    if (!sentFrom) return;
+    const id = setTimeout(() => setSentFrom(null), BUSY_MAX_MS);
+    return () => clearTimeout(id);
+  }, [sentFrom]);
+
+  const send = (part: 'arm' | 'body', call: Promise<unknown>) => {
+    setSentFrom({ part, from: part === 'arm' ? arm : bodyNow });
+    call.catch(() => {
+      setSentFrom(null);
+      setNote('noAnswer');
+    });
+  };
+
+  // off: power on. Powered: enable or power off. Enabled: disable (powering off goes through disabled first).
+  // Free drive and a fault are handled at the arm itself, so the chip only shows them.
+  const switchArm = () => {
+    if (busyArm || arm === 'drag' || arm === 'error') return;
+    Haptics.selectionAsync().catch(() => {});
+    const url = connection.baseUrl;
+    const cancel = { text: t('cancel'), style: 'cancel' as const };
+    if (arm === 'off') {
+      Alert.alert(t('armPowerAsk'), undefined, [cancel, { text: t('powerOn'), onPress: () => send('arm', setArmPower(url, true)) }]);
+    } else if (arm === 'disabled') {
+      Alert.alert(t('armEnableAsk'), undefined, [
+        cancel,
+        { text: t('powerOff'), style: 'destructive', onPress: () => send('arm', setArmPower(url, false)) },
+        { text: t('enable'), onPress: () => send('arm', setArmEnabled(url, true)) },
+      ]);
+    } else {
+      Alert.alert(t('armDisableAsk'), undefined, [
+        cancel,
+        { text: t('disable'), style: 'destructive', onPress: () => send('arm', setArmEnabled(url, false)) },
+      ]);
+    }
+  };
+
+  // a silent controller cannot be switched from here, and an older robot API does not say
+  const switchBody = () => {
+    if (busyBody || (bodyNow !== 'enabled' && bodyNow !== 'disabled')) return;
+    Haptics.selectionAsync().catch(() => {});
+    const on = bodyNow === 'disabled';
+    Alert.alert(t(on ? 'bodyEnableAsk' : 'bodyDisableAsk'), undefined, [
+      { text: t('cancel'), style: 'cancel' },
+      {
+        text: t(on ? 'enable' : 'disable'),
+        style: on ? 'default' : 'destructive',
+        onPress: () => send('body', setBodyEnabled(connection.baseUrl, on)),
+      },
+    ]);
+  };
 
   return (
     <>
-      <Text
-        style={[styles.name, { fontSize: nameSize, position: 'absolute', left: 24 + inset.left, top: 18 + inset.top }]}
-        pointerEvents="none"
-      >
-        Lumi
-      </Text>
-      {status && (
-        <View style={[styles.barRow, { top: 14 + inset.top }]} pointerEvents="none">
-          <View style={[styles.bar, { gap: rowSize * 0.75, paddingHorizontal: rowSize, height: 36 }]}>
-            <View style={[styles.row, { gap: 7 }]}>
-              <View style={[styles.dot, { width: smallSize * 0.55, height: smallSize * 0.55, backgroundColor: STATE_DOT[status.status] }]} />
-              <Text style={[styles.strong, { fontSize: smallSize }]}>{t(status.status)}</Text>
-            </View>
-            {sep}
-            <View style={[styles.row, { gap: 7 }]}>
-              <View style={[styles.dot, { width: smallSize * 0.55, height: smallSize * 0.55, backgroundColor: ARM_DOT[arm] }]} />
-              <Text style={[styles.soft, { fontSize: smallSize }]}>{t(ARM_TEXT[arm])}</Text>
-            </View>
-            {body && (
-              <>
-                {sep}
-                <Reading label={t('head')} value={`${Math.round(body.headYawDeg)}°`} size={smallSize} />
-                <Reading label={t('waist')} value={`${Math.round(body.waistDeg)}°`} size={smallSize} />
-                <Reading label={t('lift')} value={`${Math.round(body.liftMm)} mm`} size={smallSize} />
-              </>
-            )}
+      <View style={[styles.nameBlock, { left: 24 + inset.left, top: 14 + inset.top }]} pointerEvents="none">
+        <Text style={[styles.name, { fontSize: nameSize, lineHeight: nameSize * 1.1 }]}>LUMI</Text>
+        {status && (
+          <View style={[styles.row, { gap: small * 0.6 }]}>
+            <View style={[styles.dot, { width: small * 0.6, height: small * 0.6, backgroundColor: STATE_DOT[status.status] }]} />
+            <Text style={[styles.label, { fontSize: small }]}>{t(status.status)}</Text>
           </View>
+        )}
+      </View>
+
+      {status && (
+        <View style={[styles.chipRow, { top: 14 + inset.top }]} pointerEvents="box-none">
+          <View style={styles.chips} pointerEvents="box-none">
+            <Pressable
+              onPress={switchBody}
+              hitSlop={8}
+              accessibilityRole="button"
+              accessibilityState={{ busy: busyBody }}
+              accessibilityLabel={t(BODY_TEXT[bodyNow])}
+              style={({ pressed }) => pressed && styles.pressed}
+            >
+              <Chip on={bodyNow !== 'off'} colour={BODY_DOT[bodyNow]} text={t(BODY_TEXT[bodyNow])} size={small} busy={busyBody} />
+            </Pressable>
+            <Pressable
+              onPress={switchArm}
+              hitSlop={8}
+              accessibilityRole="button"
+              accessibilityState={{ busy: busyArm }}
+              accessibilityLabel={t(ARM_TEXT[arm])}
+              style={({ pressed }) => pressed && styles.pressed}
+            >
+              <Chip on={arm !== 'off'} colour={ARM_DOT[arm]} text={t(ARM_TEXT[arm])} size={small} busy={busyArm} />
+            </Pressable>
+          </View>
+          {note && <Text style={[styles.note, { fontSize: small }]}>{t(note)}</Text>}
+        </View>
+      )}
+
+      {bodyPoseKnown(body) && (
+        <View style={[styles.readings, { right: 24 + inset.right, top: 14 + inset.top + 52 }]} pointerEvents="none">
+          <Reading label={t('head')} value={`${Math.round(body.headYawDeg)}°`} size={small} />
+          <Reading label={t('waist')} value={`${Math.round(body.waistDeg)}°`} size={small} />
+          <Reading label={t('lift')} value={`${Math.round(body.liftMm)} mm`} size={small} />
         </View>
       )}
     </>
   );
 }
 
+type BodyState = 'off' | 'on' | 'disabled' | 'enabled';
+
+/** off: the controller does not answer; on: it answers but the robot's API does not say whether it is enabled. */
+function bodyState(body: Body | null): BodyState {
+  if (!body) return 'off';
+  if (body.enabled === null) return 'on';
+  return body.enabled ? 'enabled' : 'disabled';
+}
+
+const BODY_TEXT: Record<BodyState, TextKey> = { off: 'bodyOff', on: 'bodyOn', disabled: 'bodyDisabled', enabled: 'bodyEnabled' };
+const BODY_DOT: Record<BodyState, string> = { off: mono.dim, on: mono.green, disabled: mono.blue, enabled: mono.green };
+
+function Chip({ on, colour, text, size, busy }: { on: boolean; colour: string; text: string; size: number; busy?: boolean }) {
+  const d = size * 0.7;
+  return (
+    <View style={[styles.chip, { height: size * 2.6, paddingHorizontal: size * 1.1, gap: size * 0.55 }, on && styles.chipOn]}>
+      {busy ? (
+        <ActivityIndicator size="small" color={mono.text} />
+      ) : (
+        <View
+          style={[
+            styles.dot,
+            { width: d, height: d },
+            on ? { backgroundColor: colour, shadowColor: colour, shadowOpacity: 0.9, shadowRadius: 6 } : styles.dotOff,
+          ]}
+        />
+      )}
+      <Text style={[styles.label, { fontSize: size }, on && styles.labelOn]}>{text}</Text>
+    </View>
+  );
+}
+
 function Reading({ label, value, size }: { label: string; value: string; size: number }) {
   return (
-    <View style={[styles.row, { gap: 6 }]}>
-      <Text style={[styles.soft, { fontSize: size }]}>{label}</Text>
-      <Text style={[styles.strong, { fontSize: size }]}>{value}</Text>
+    <View style={[styles.row, { gap: size * 0.6 }]}>
+      <Text style={[styles.label, { fontSize: size }]}>{label}</Text>
+      <Text style={[styles.value, { fontSize: size }]}>{value}</Text>
     </View>
   );
 }
 
 // keeps small words readable over the bright planet and skyline behind them
-const shadow = { textShadowColor: 'rgba(0,0,0,0.85)', textShadowRadius: 6 };
+const shadow = { textShadowColor: 'rgba(0,0,0,0.9)', textShadowRadius: 6 };
 
 const styles = StyleSheet.create({
-  name: { fontFamily: fonts.title, color: '#eef2f5', letterSpacing: 0.5 },
-  barRow: { position: 'absolute', left: 0, right: 0, alignItems: 'center' },
-  // same glass as the language and battery buttons in the same row
-  bar: {
+  nameBlock: { position: 'absolute', gap: 4 },
+  name: { fontFamily: fonts.dot, color: mono.text, letterSpacing: 3, ...shadow },
+  row: { flexDirection: 'row', alignItems: 'center' },
+  label: { fontFamily: fonts.mono, color: mono.soft, letterSpacing: 1, textTransform: 'uppercase', ...shadow },
+  labelOn: { color: mono.text },
+  value: { fontFamily: fonts.monoBold, color: mono.text, ...shadow },
+  dot: { borderRadius: 99 },
+  dotOff: { borderWidth: 1.5, borderColor: mono.soft },
+  chipRow: { position: 'absolute', left: 0, right: 0, alignItems: 'center', gap: 8 },
+  chips: { flexDirection: 'row', gap: 10 },
+  chip: {
     flexDirection: 'row',
     alignItems: 'center',
-    borderRadius: 18,
-    backgroundColor: 'rgba(14,20,26,0.7)',
-    borderWidth: 1,
-    borderColor: 'rgba(160,190,205,0.18)',
+    borderRadius: 999,
+    borderWidth: 1.5,
+    borderColor: mono.dim,
+    backgroundColor: mono.glass,
   },
-  row: { flexDirection: 'row', alignItems: 'center' },
-  strong: { fontFamily: fonts.semibold, color: '#eef2f5' },
-  soft: { fontFamily: fonts.body, color: '#8fa0ab', ...shadow },
-  sep: { width: 1, backgroundColor: 'rgba(160,190,205,0.2)' },
-  dot: { borderRadius: 99 },
+  chipOn: { borderColor: mono.text },
+  pressed: { opacity: 0.6 },
+  note: {
+    fontFamily: fonts.mono,
+    color: mono.yellow,
+    paddingHorizontal: 12,
+    paddingVertical: 5,
+    borderRadius: 999,
+    backgroundColor: 'rgba(0,0,0,0.85)',
+    overflow: 'hidden',
+  },
+  readings: { position: 'absolute', alignItems: 'flex-end', gap: 6 },
 });
