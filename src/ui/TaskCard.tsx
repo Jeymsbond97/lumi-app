@@ -1,4 +1,4 @@
-// The current task, left middle: how it goes, the step it is on, and Pause / Resume, Release and Stop.
+// The current task, right middle (the modes panel sits on the left): how it goes, the step it is on, and Pause / Resume, Release and Stop.
 // Shown while a task runs and for a moment after it ends; the robot's next reply moves it on.
 import { useState } from 'react';
 import { Pressable, StyleSheet, Text, useWindowDimensions, View } from 'react-native';
@@ -55,7 +55,7 @@ export function TaskCard() {
     <Animated.View
       entering={FadeIn.duration(200)}
       exiting={FadeOut.duration(300)}
-      style={[styles.card, { left: 24 + inset.left, top: '34%', maxWidth: clamp(220, 0.42 * h, 340) }]}
+      style={[styles.card, { right: 24 + inset.right, top: '34%', maxWidth: clamp(220, 0.42 * h, 340) }]}
     >
       <View style={[styles.row, { gap: text * 0.5 }]}>
         <View style={[styles.dot, { width: text * 0.55, height: text * 0.55, backgroundColor: colour }]} />
