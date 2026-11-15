@@ -1,4 +1,4 @@
-// Greeter, Patrol and Wave greeting switches on the right, above STOP (the language menu opens over the top right).
+// Greeter, Patrol and Wave greeting switches on the left, above STOP.
 // A switch shows what the robot says, not what was tapped: it moves once the robot answers.
 import { useState } from 'react';
 import { ActivityIndicator, Pressable, StyleSheet, Text, useWindowDimensions, View } from 'react-native';
@@ -40,7 +40,7 @@ export function ModesPanel() {
   return (
     <View
       // room between the panel and STOP for the "Stopped" note
-      style={[styles.panel, { right: 18 + inset.right, bottom: 18 + inset.bottom + stopSize(h) + 52 }]}
+      style={[styles.panel, { left: 18 + inset.left, bottom: 18 + inset.bottom + stopSize(h) + 52 }]}
     >
       <Text style={[styles.title, { fontSize: text * 0.8 }]}>{t('modes')}</Text>
       {MODES.map((m) => (
