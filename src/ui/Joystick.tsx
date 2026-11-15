@@ -1,4 +1,4 @@
-// Drive the base with one round pad, bottom left: up forward, down back, left and right turn, diagonal both;
+// Drive the base with one round pad, bottom right: up forward, down back, left and right turn, diagonal both;
 // further from the centre is faster. Lumi moves only while the thumb is on the pad: lifting it sends a stop at once,
 // and the robot also stops by itself 0.35 s after the last command (a dropped connection, a closed app).
 import { useEffect, useRef, useState } from 'react';
@@ -117,7 +117,7 @@ export function Joystick() {
   );
 
   return (
-    <View style={[styles.root, { left: 24 + inset.left, bottom: 18 + inset.bottom }]} pointerEvents="box-none">
+    <View style={[styles.root, { right: 24 + inset.right, bottom: 18 + inset.bottom }]} pointerEvents="box-none">
       {note && <Text style={styles.note}>{t(note)}</Text>}
       <View
         onStartShouldSetResponder={() => true}
@@ -153,7 +153,7 @@ export function Joystick() {
 }
 
 const styles = StyleSheet.create({
-  root: { position: 'absolute', alignItems: 'flex-start', gap: 10 },
+  root: { position: 'absolute', alignItems: 'flex-end', gap: 10 },
   // style D: a dashed ring with a solid white knob
   pad: {
     backgroundColor: 'rgba(0,0,0,0.35)',

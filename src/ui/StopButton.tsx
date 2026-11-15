@@ -1,4 +1,4 @@
-// STOP on every screen, bottom right: one tap, no confirmation. It stops the base, the arm, the task and the assistant.
+// STOP on every screen, bottom left: one tap, no confirmation. It stops the base, the arm, the task and the assistant.
 // It is never disabled and never waits for an earlier tap: every tap sends STOP again.
 import { useEffect, useRef, useState } from 'react';
 import { Pressable, StyleSheet, Text, useWindowDimensions, View } from 'react-native';
@@ -44,7 +44,7 @@ export function StopButton() {
   };
 
   return (
-    <View style={[styles.root, { right: 24 + inset.right, bottom: 18 + inset.bottom }]} pointerEvents="box-none">
+    <View style={[styles.root, { left: 24 + inset.left, bottom: 18 + inset.bottom }]} pointerEvents="box-none">
       {note && (
         <Animated.View entering={FadeIn.duration(120)} exiting={FadeOut.duration(200)} style={styles.note}>
           <Text style={[styles.noteText, note === 'noAnswer' && styles.noteBad]}>{t(note)}</Text>
@@ -69,7 +69,7 @@ export function StopButton() {
 }
 
 const styles = StyleSheet.create({
-  root: { position: 'absolute', alignItems: 'flex-end', gap: 10 },
+  root: { position: 'absolute', alignItems: 'flex-start', gap: 10 },
   button: {
     alignItems: 'center',
     justifyContent: 'center',
