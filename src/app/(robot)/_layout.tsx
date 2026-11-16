@@ -6,6 +6,7 @@ import { Stack } from 'expo-router';
 import Animated, { FadeIn } from 'react-native-reanimated';
 import { RobotProvider } from '../../lib/robot';
 import { LandingProvider, useLanding } from '../../lib/landing';
+import { noteTouch } from '../../lib/driveLock';
 import { StatusHud } from '../../ui/StatusHud';
 import { BatteryBadge } from '../../ui/BatteryBadge';
 import { ModesPanel } from '../../ui/ModesPanel';
@@ -34,7 +35,14 @@ export default function RobotLayout() {
   return (
     <RobotProvider>
       <LandingProvider>
-        <View style={styles.root}>
+        {/* every touch on these screens counts as someone being there: the joystick locks after 5 minutes without */}
+        <View
+          style={styles.root}
+          onStartShouldSetResponderCapture={() => {
+            noteTouch(Date.now());
+            return false;
+          }}
+        >
           <Stack screenOptions={{ headerShown: false, contentStyle: { backgroundColor: colors.bg }, animation: 'fade' }} />
           <Controls />
         </View>
