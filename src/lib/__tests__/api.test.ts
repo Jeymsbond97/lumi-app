@@ -3,7 +3,7 @@ import { toStatus } from '../api';
 describe('toStatus', () => {
   it('reads battery, charging, body and arm from a full /status reply', () => {
     const s = toStatus({
-      base: { power_percent: 98, charge_state: true, move_status: 'idle' },
+      base: { power_percent: 98, charge_state: true, move_status: 'idle', current_pose: { x: -1.13, y: 0.004, theta: 0.04 } },
       body: { lift_mm: 75, waist_deg: -12.5, head_yaw_deg: 30, head_pitch_deg: 5, enabled: true },
       arm: { power: true, enable: true },
     });
@@ -14,6 +14,7 @@ describe('toStatus', () => {
       body: { liftMm: 75, waistDeg: -12.5, headYawDeg: 30, headPitchDeg: 5, enabled: true },
       armState: 'enabled',
       armSilent: false,
+      pose: { x: -1.13, y: 0.004, theta: 0.04 },
     });
   });
 
@@ -26,6 +27,7 @@ describe('toStatus', () => {
     });
     expect(s.armState).toBe('off');
     expect(s.armSilent).toBe(true);
+    expect(s.pose).toBeNull();                         // no pose in the reply: none drawn on the map
     expect(s.body).toBeNull();
   });
 

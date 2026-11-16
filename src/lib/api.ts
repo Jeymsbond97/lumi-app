@@ -1,6 +1,7 @@
 import { fetchWithTimeout } from './connection';
 import type { TextKey } from './i18n';
 import type { AxisCommand } from './drive';
+import { toMapInfo, type MapInfo } from './mapGeom';
 
 // Shapes of lumi-api replies (lumi-wave api/server.py), only the parts the app reads.
 // A part that does not answer comes back as { error: "..." } instead.
@@ -12,6 +13,7 @@ interface RawStatus {
     power_percent?: number;
     charge_state?: boolean;
     move_status?: string;
+    current_pose?: { x?: number; y?: number; theta?: number };
   };
   body?: Failed & {
     lift_mm?: number;
@@ -64,6 +66,8 @@ export interface RobotStatus {
   armState: ArmState;
   /** The arm controller did not answer this round (it is busy while it enables, for example); armState says off then. */
   armSilent: boolean;
+  /** Where the base is on the current map (m, rad), null when the base does not say. */
+  pose: { x: number; y: number; theta: number } | null;
 }
 
 const num = (v: unknown): v is number => typeof v === 'number' && Number.isFinite(v);
@@ -90,6 +94,10 @@ export function toStatus(raw: RawStatus): RobotStatus {
     // powered but not enabled shows blue on the real ring, enabled green, no power dark
     armState: arm.error || !arm.power ? 'off' : arm.enable ? 'enabled' : 'disabled',
     armSilent: !!arm.error,
+    pose:
+      !base.error && num(base.current_pose?.x) && num(base.current_pose?.y)
+        ? { x: base.current_pose.x, y: base.current_pose.y, theta: num(base.current_pose.theta) ? base.current_pose.theta : 0 }
+        : null,
   };
 }
 
@@ -245,6 +253,36 @@ const post = (baseUrl: string, path: string, body?: object, timeoutMs = 5000) =>
 
 /** STOP everything: base drive, arm program, task and the assistant. */
 export const stopAll = (baseUrl: string) => post(baseUrl, '/stop');
+
+// ---------- the map (lumi-wave /map/*, /agv/*) ----------
+export async function getMapInfo(baseUrl: string, timeoutMs = 8000): Promise<MapInfo> {
+  return toMapInfo(await getJson<Parameters<typeof toMapInfo>[0]>(baseUrl, '/map/info', timeoutMs));
+}
+
+/** The map picture in the app's dark look; `v` changes the address when the map changed (no stale cached picture). */
+export const mapImageUrl = (baseUrl: string, m: MapInfo, v: number) =>
+  `${baseUrl}/map/image?map_name=${encodeURIComponent(m.name)}&floor=${m.floor}&dark=true&v=${v}`;
+
+export const goMarker = (baseUrl: string, marker: string) => post(baseUrl, '/agv/go', { marker });
+export const goPoint = (baseUrl: string, x: number, y: number, theta: number) =>
+  post(baseUrl, '/agv/go_point', { x, y, theta });
+/** A marker where Lumi stands (no x, y) or at a point of the map. */
+export const saveMarker = (baseUrl: string, name: string, at?: { x: number; y: number; theta: number }) =>
+  post(baseUrl, '/map/marker', { name, ...at });
+export const deleteMarker = (baseUrl: string, name: string) => post(baseUrl, '/map/marker/delete', { name });
+/** Tell the base where Lumi is on the map (after a map switch, or when its icon is off). */
+export const setPosition = (baseUrl: string, x: number, y: number, theta: number) =>
+  post(baseUrl, '/map/position', { x, y, theta });
+/** What the lidar sees now: points [x ahead, y left] (m) around the base (lumi-wave /map/scan). */
+export async function getScan(baseUrl: string, timeoutMs = 5000): Promise<number[][]> {
+  return (await getJson<{ points?: number[][] }>(baseUrl, '/map/scan', timeoutMs)).points ?? [];
+}
+
+/** Lumi stands at this marker: the base takes its place and heading from it. */
+export const setPositionAtMarker = (baseUrl: string, name: string) => post(baseUrl, '/map/position/marker', { name });
+/** The base restarts with the other map; Lumi's position is set after. */
+export const switchMap = (baseUrl: string, name: string, floor: number) =>
+  post(baseUrl, '/map/switch', { map_name: name, floor }, 15000);
 
 export async function setMode(baseUrl: string, mode: Mode, on: boolean): Promise<Modes> {
   return toModes((await post(baseUrl, '/assistant/modes', { [mode]: on }, 10000)) as RawModes);

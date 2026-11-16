@@ -84,7 +84,7 @@ describe('taskToShow', () => {
 
 describe('holdArm', () => {
   const st = (armState: RobotStatus['armState'], armSilent = false): RobotStatus =>
-    ({ battery: 90, charging: false, status: 'statusReady', body: null, armState, armSilent });
+    ({ battery: 90, charging: false, status: 'statusReady', body: null, armState, armSilent, pose: null });
 
   it('keeps the last arm state while the controller is busy enabling (it does not answer /status then)', () => {
     const mem: ArmMemory = { last: null, at: 0 };
