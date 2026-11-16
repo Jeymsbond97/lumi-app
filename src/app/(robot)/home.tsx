@@ -1,5 +1,5 @@
-import { useEffect, useMemo, useRef, useState, type ComponentType, type Ref } from 'react';
-import { StyleSheet, View } from 'react-native';
+import { useCallback, useEffect, useMemo, useRef, useState, type ComponentType, type Ref } from 'react';
+import { Platform, StyleSheet, View } from 'react-native';
 import Animated, { FadeOut } from 'react-native-reanimated';
 import { Asset } from 'expo-asset';
 import { WebView, type WebViewMessageEvent, type WebViewProps } from 'react-native-webview';
@@ -31,6 +31,12 @@ function sceneHtml(glbUri: string): string {
   return SCENE_HTML.replace('<head>', `<head>${settings}`);
 }
 
+// In a browser (the web build, for looking at the screens on a computer) react-native-webview draws nothing: the scene
+// goes into an iframe instead, and the page's messages come over window.postMessage.
+const IS_WEB = Platform.OS === 'web';
+const WEB_BRIDGE = '<script>window.ReactNativeWebView={postMessage:function(d){parent.postMessage(d,"*")}};</script>';
+type SceneFrame = { contentWindow: { lumi?: { setState: (s: SceneState) => void } } | null };
+
 async function loadModel(): Promise<ModelSource> {
   // eslint-disable-next-line @typescript-eslint/no-require-imports -- Metro bundles assets through require
   const asset = Asset.fromModule(require('../../../assets/model/lumi.glb'));
@@ -51,6 +57,10 @@ export default function Home() {
   const { status, joints } = useRobot();
   const { done: landingDone } = useLanding();
   const html = useMemo(() => (model ? sceneHtml(model.glbUri) : ''), [model]);
+  const frame = useRef<SceneFrame | null>(null);
+  const setFrame = useCallback((el: HTMLIFrameElement | null) => {
+    frame.current = el as SceneFrame | null;
+  }, []);
 
   useEffect(() => {
     loadModel().then(setModel, (e) => console.warn('model', e));
@@ -62,7 +72,9 @@ export default function Home() {
 
   const pushScene = (st: SceneState) => {
     lastScene.current = st;
-    if (sceneReadyRef.current) web.current?.injectJavaScript(`window.lumi && window.lumi.setState(${JSON.stringify(st)}); true;`);
+    if (!sceneReadyRef.current) return;
+    if (IS_WEB) frame.current?.contentWindow?.lumi?.setState(st);
+    else web.current?.injectJavaScript(`window.lumi && window.lumi.setState(${JSON.stringify(st)}); true;`);
   };
 
   // the scene may finish loading after the first reply; give it what is already known
@@ -81,9 +93,10 @@ export default function Home() {
     if (status) pushScene(toSceneState(status, joints));
   }, [status, joints]);
 
-  const onMessage = (e: WebViewMessageEvent) => {
+  const onMessage = (e: WebViewMessageEvent) => handle(e.nativeEvent.data);
+  const handle = (data: string) => {
     try {
-      const msg = JSON.parse(e.nativeEvent.data) as { type: string; message?: string; ms?: number; fps?: number; pixelRatio?: number };
+      const msg = JSON.parse(data) as { type: string; message?: string; ms?: number; fps?: number; pixelRatio?: number };
       if (__DEV__ && msg.type === 'ready') console.log(`scene ready after ${msg.ms} ms`);
       if (__DEV__ && msg.type === 'perf') console.log(`scene ${msg.fps} fps at ${msg.pixelRatio}x`);
       if (msg.type === 'ready') setSceneReady(true);
@@ -93,9 +106,23 @@ export default function Home() {
     }
   };
 
+  useEffect(() => {
+    if (!IS_WEB) return;
+    const listen = (e: { data: unknown }) => typeof e.data === 'string' && handle(e.data);
+    globalThis.addEventListener?.('message', listen);
+    return () => globalThis.removeEventListener?.('message', listen);
+  }, []);
+
   return (
     <View style={styles.root}>
-      {model && (
+      {model && IS_WEB && (
+        <iframe
+          ref={setFrame}
+          srcDoc={html.replace('<head>', `<head>${WEB_BRIDGE}`)}
+          style={{ border: 0, width: '100%', height: '100%', background: colors.bg }}
+        />
+      )}
+      {model && !IS_WEB && (
         <SceneView
           ref={web}
           style={styles.web}
