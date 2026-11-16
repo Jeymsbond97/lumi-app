@@ -190,22 +190,34 @@ interface RawModes {
   greeter?: boolean;
   patrol?: boolean;
   wave_greet?: boolean;
+  welcome?: boolean;
   running?: boolean;
 }
 
-export type Mode = 'greeter' | 'patrol' | 'wave_greet';
-export const MODES: Mode[] = ['greeter', 'patrol', 'wave_greet'];
-export const MODE_TEXT: Record<Mode, TextKey> = { greeter: 'modeGreeter', patrol: 'modePatrol', wave_greet: 'modeWave' };
+export type Mode = 'greeter' | 'patrol' | 'wave_greet' | 'welcome';
+export const MODES: Mode[] = ['greeter', 'patrol', 'wave_greet', 'welcome'];
+export const MODE_TEXT: Record<Mode, TextKey> = {
+  greeter: 'modeGreeter',
+  patrol: 'modePatrol',
+  wave_greet: 'modeWave',
+  welcome: 'modeWelcome',
+};
 
 export type Modes = Record<Mode, boolean>;
 
 /**
- * A mode is on only while the assistant runs it: STOP ends the assistant but keeps the switches,
- * and switching a mode on again starts the assistant (lumi-wave modes_set).
+ * Greeter and Patrol are on only while the assistant runs them: STOP ends the assistant but keeps the switches, and
+ * switching one on again starts it (lumi-wave modes_set). Wave and Welcome work without the assistant, so they show
+ * the switch as the robot keeps it (the robot turns them off itself after a STOP or an arm fault).
  */
 export function toModes(raw: RawModes): Modes {
   const running = raw.running === true;
-  return { greeter: running && raw.greeter === true, patrol: running && raw.patrol === true, wave_greet: running && raw.wave_greet === true };
+  return {
+    greeter: running && raw.greeter === true,
+    patrol: running && raw.patrol === true,
+    wave_greet: raw.wave_greet === true,
+    welcome: raw.welcome === true,
+  };
 }
 
 // ---------- reading ----------

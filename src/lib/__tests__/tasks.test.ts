@@ -49,17 +49,19 @@ describe('stepText', () => {
 });
 
 describe('toModes', () => {
-  it('shows a mode on only while the assistant runs it (STOP keeps the switches)', () => {
-    expect(toModes({ greeter: true, patrol: false, wave_greet: true, running: false })).toEqual({
+  it('shows Greeter and Patrol on only while the assistant runs them (STOP keeps the switches)', () => {
+    expect(toModes({ greeter: true, patrol: true, running: false })).toMatchObject({ greeter: false, patrol: false });
+    expect(toModes({ greeter: true, patrol: false, running: true })).toMatchObject({ greeter: true, patrol: false });
+  });
+
+  it('shows Wave and Welcome as the robot says, with or without the assistant (they work alone)', () => {
+    expect(toModes({ wave_greet: true, welcome: true, running: false })).toEqual({
       greeter: false,
       patrol: false,
-      wave_greet: false,
-    });
-    expect(toModes({ greeter: true, patrol: false, wave_greet: true, running: true })).toEqual({
-      greeter: true,
-      patrol: false,
       wave_greet: true,
+      welcome: true,
     });
+    expect(toModes({ running: true })).toEqual({ greeter: false, patrol: false, wave_greet: false, welcome: false });
   });
 });
 
