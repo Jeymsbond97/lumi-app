@@ -1,4 +1,4 @@
-// On every screen after the loading screen (style D): the name in dot matrix top left with the state under it,
+// On every screen after the loading screen (style D): the name in dot matrix top left (moving or base offline under it),
 // top centre the body and arm power (tapping the body enables or disables it; tapping the arm powers it on, enables,
 // disables or powers it off; each asks first in ConfirmDialog), and on the right under the battery
 // head, waist and lift (only while the head and lift controller answers; no empty placeholders).
@@ -27,7 +27,6 @@ export const ARM_DOT: Record<ArmState, string> = {
 };
 
 const STATE_DOT: Partial<Record<TextKey, string>> = {
-  statusReady: mono.green,
   statusMoving: mono.blue,
   statusBaseOffline: mono.red,
 };
@@ -111,7 +110,8 @@ export function StatusHud() {
     <>
       <View style={[styles.nameBlock, { left: 24 + inset.left, top: 14 + inset.top }]} pointerEvents="none">
         <Text style={[styles.name, { fontSize: nameSize, lineHeight: nameSize * 1.1 }]}>LUMI</Text>
-        {status && (
+        {/* only a state worth a look: moving or the base offline; plain "ready" is not shown (owner, 2026-11-16) */}
+        {status && status.status !== 'statusReady' && (
           <View style={[styles.row, { gap: small * 0.6 }]}>
             <View style={[styles.dot, { width: small * 0.6, height: small * 0.6, backgroundColor: STATE_DOT[status.status] }]} />
             <Text style={[styles.label, { fontSize: small }]}>{t(status.status)}</Text>
