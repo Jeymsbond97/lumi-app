@@ -62,6 +62,8 @@ export interface RobotStatus {
   /** null when the head and lift controller does not answer. */
   body: Body | null;
   armState: ArmState;
+  /** The arm controller did not answer this round (it is busy while it enables, for example); armState says off then. */
+  armSilent: boolean;
 }
 
 const num = (v: unknown): v is number => typeof v === 'number' && Number.isFinite(v);
@@ -87,6 +89,7 @@ export function toStatus(raw: RawStatus): RobotStatus {
         : null,
     // powered but not enabled shows blue on the real ring, enabled green, no power dark
     armState: arm.error || !arm.power ? 'off' : arm.enable ? 'enabled' : 'disabled',
+    armSilent: !!arm.error,
   };
 }
 

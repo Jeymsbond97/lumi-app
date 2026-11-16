@@ -2,7 +2,7 @@
 // One round of requests at a time, about once a second; three failed rounds in a row mean the robot is lost.
 import { createContext, useContext, useEffect, useRef, useState, type ReactNode } from 'react';
 import { router } from 'expo-router';
-import { getArmJoints, getModes, getStatus, getTaskState, isEnded, type Modes, type RobotStatus, type TaskState } from './api';
+import { getArmJoints, getModes, getStatus, getTaskState, isEnded, type ArmState, type Modes, type RobotStatus, type TaskState } from './api';
 import type { Connection } from './connection';
 import { session } from './session';
 
@@ -10,6 +10,8 @@ const POLL_MS = 1000;
 const LOST_AFTER_FAILS = 3;
 /** How long a finished task stays on screen, so people see how it ended. */
 const ENDED_SHOWN_MS = 8000;
+/** The arm controller stays silent while it enables (up to 10 s); the arm keeps its last state that long, plus some. */
+const ARM_SILENT_HELD_MS = 15000;
 
 export interface Robot {
   connection: Connection;
@@ -43,6 +45,24 @@ export function taskToShow(mem: TaskMemory, next: TaskState | null, now: number)
   return now < mem.endedUntil ? next : null;
 }
 
+export interface ArmMemory {
+  last: ArmState | null;
+  at: number;
+}
+
+/**
+ * A silent arm is not an arm without power: while it enables, the controller does not answer /status for a few
+ * seconds, and the chip went from disabled to off to enabled. A short silence keeps the last state the arm reported.
+ */
+export function holdArm(mem: ArmMemory, st: RobotStatus, now: number): RobotStatus {
+  if (!st.armSilent) {
+    mem.last = st.armState;
+    mem.at = now;
+    return st;
+  }
+  return mem.last && now - mem.at < ARM_SILENT_HELD_MS ? { ...st, armState: mem.last } : st;
+}
+
 export function RobotProvider({ children }: { children: ReactNode }) {
   const connection = session.connection;
   const [status, setStatus] = useState<RobotStatus | null>(null);
@@ -50,6 +70,7 @@ export function RobotProvider({ children }: { children: ReactNode }) {
   const [task, setTask] = useState<TaskState | null>(null);
   const [modes, setModes] = useState<Modes | null>(null);
   const taskMemory = useRef<TaskMemory>({ prev: null, endedUntil: 0 });
+  const armMemory = useRef<ArmMemory>({ last: null, at: 0 });
 
   useEffect(() => {
     if (!connection) {
@@ -65,12 +86,13 @@ export function RobotProvider({ children }: { children: ReactNode }) {
       const started = Date.now();
       try {
         // the task and the modes are extras: a slow reply there must not count as losing the robot
-        const [st, t, m] = await Promise.all([
+        const [raw, t, m] = await Promise.all([
           getStatus(url),
           getTaskState(url).catch(() => undefined),
           getModes(url).catch(() => undefined),
         ]);
-        const j = st.armState === 'off' ? null : await getArmJoints(url).catch(() => null);
+        const st = holdArm(armMemory.current, raw, Date.now());
+        const j = st.armState === 'off' || st.armSilent ? null : await getArmJoints(url).catch(() => null);
         fails = 0;
         if (!alive) return;
         setStatus(st);

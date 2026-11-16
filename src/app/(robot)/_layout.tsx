@@ -19,11 +19,12 @@ function Controls() {
   if (covering) return null;
   return (
     <Animated.View style={StyleSheet.absoluteFill} entering={FadeIn.duration(450)} pointerEvents="box-none">
-      <StatusHud />
       <BatteryBadge />
       <ModesPanel />
       <TaskCard />
       <Dock />
+      {/* the status bar's confirm dialog covers everything here but STOP */}
+      <StatusHud />
       <StopButton />
     </Animated.View>
   );

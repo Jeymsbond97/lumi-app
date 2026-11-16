@@ -1,5 +1,5 @@
-import { stepText, taskButtons, toModes, toTaskState, type TaskState } from '../api';
-import { taskToShow, type TaskMemory } from '../robot';
+import { stepText, taskButtons, toModes, toTaskState, type RobotStatus, type TaskState } from '../api';
+import { holdArm, taskToShow, type ArmMemory, type TaskMemory } from '../robot';
 
 const running: TaskState = { phase: 'running', step: 'picking', paused: false, holding: false, giving: false };
 
@@ -77,5 +77,26 @@ describe('taskToShow', () => {
     expect(taskToShow(m, done, 1000)).toEqual(done);
     expect(taskToShow(m, done, 8999)).toEqual(done);
     expect(taskToShow(m, done, 9000)).toBeNull();
+  });
+});
+
+describe('holdArm', () => {
+  const st = (armState: RobotStatus['armState'], armSilent = false): RobotStatus =>
+    ({ battery: 90, charging: false, status: 'statusReady', body: null, armState, armSilent });
+
+  it('keeps the last arm state while the controller is busy enabling (it does not answer /status then)', () => {
+    const mem: ArmMemory = { last: null, at: 0 };
+    expect(holdArm(mem, st('disabled'), 0).armState).toBe('disabled');
+    expect(holdArm(mem, st('off', true), 1000).armState).toBe('disabled');
+    expect(holdArm(mem, st('off', true), 9000).armState).toBe('disabled');
+    expect(holdArm(mem, st('enabled'), 10000).armState).toBe('enabled');
+  });
+
+  it('shows the arm off when it stays silent, and when it has no power', () => {
+    const mem: ArmMemory = { last: null, at: 0 };
+    holdArm(mem, st('enabled'), 0);
+    expect(holdArm(mem, st('off', true), 16000).armState).toBe('off');
+    expect(holdArm(mem, st('off'), 17000).armState).toBe('off');
+    expect(holdArm({ last: null, at: 0 }, st('off', true), 0).armState).toBe('off');
   });
 });

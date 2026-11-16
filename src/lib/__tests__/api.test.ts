@@ -13,6 +13,7 @@ describe('toStatus', () => {
       status: 'statusReady',
       body: { liftMm: 75, waistDeg: -12.5, headYawDeg: 30, headPitchDeg: 5, enabled: true },
       armState: 'enabled',
+      armSilent: false,
     });
   });
 
@@ -24,6 +25,7 @@ describe('toStatus', () => {
       arm: { error: 'no reply within 2.5 s' },
     });
     expect(s.armState).toBe('off');
+    expect(s.armSilent).toBe(true);
     expect(s.body).toBeNull();
   });
 

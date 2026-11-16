@@ -1,16 +1,17 @@
 // On every screen after the loading screen (style D): the name in dot matrix top left with the state under it,
 // top centre the body and arm power (tapping the body enables or disables it; tapping the arm powers it on, enables,
-// disables or powers it off; each asks first), and on the right under the battery
+// disables or powers it off; each asks first in ConfirmDialog), and on the right under the battery
 // head, waist and lift (only while the head and lift controller answers; no empty placeholders).
 // Battery: BatteryBadge, top right.
-import { useEffect, useState } from 'react';
-import { ActivityIndicator, Alert, Pressable, StyleSheet, Text, useWindowDimensions, View } from 'react-native';
+import { useCallback, useEffect, useState } from 'react';
+import { ActivityIndicator, Pressable, StyleSheet, Text, useWindowDimensions, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import * as Haptics from 'expo-haptics';
 import { ARM_TEXT, bodyPoseKnown, setArmEnabled, setArmPower, setBodyEnabled, type ArmState, type Body } from '../lib/api';
 import type { TextKey } from '../lib/i18n';
 import { useI18n } from '../lib/i18n';
 import { useRobot } from '../lib/robot';
+import { ConfirmDialog, type ConfirmRequest } from './ConfirmDialog';
 import { clamp, fonts, mono } from './theme';
 
 const NOTE_MS = 2500;
@@ -40,6 +41,8 @@ export function StatusHud() {
   // the state of the part when a switch was sent: its chip spins until the robot reports a different one
   const [sentFrom, setSentFrom] = useState<{ part: 'arm' | 'body'; from: string } | null>(null);
   const [note, setNote] = useState<TextKey | null>(null);
+  const [ask, setAsk] = useState<ConfirmRequest | null>(null);
+  const closeAsk = useCallback(() => setAsk(null), []);
   const nameSize = clamp(26, 0.07 * h, 56);
   const small = clamp(11, 0.019 * h, 15);
   const arm = status?.armState ?? 'off';
@@ -75,20 +78,21 @@ export function StatusHud() {
     if (busyArm || arm === 'drag' || arm === 'error') return;
     Haptics.selectionAsync().catch(() => {});
     const url = connection.baseUrl;
-    const cancel = { text: t('cancel'), style: 'cancel' as const };
     if (arm === 'off') {
-      Alert.alert(t('armPowerAsk'), undefined, [cancel, { text: t('powerOn'), onPress: () => send('arm', setArmPower(url, true)) }]);
+      setAsk({ title: t('armPowerAsk'), choices: [{ text: t('powerOn'), onPress: () => send('arm', setArmPower(url, true)) }] });
     } else if (arm === 'disabled') {
-      Alert.alert(t('armEnableAsk'), undefined, [
-        cancel,
-        { text: t('powerOff'), style: 'destructive', onPress: () => send('arm', setArmPower(url, false)) },
-        { text: t('enable'), onPress: () => send('arm', setArmEnabled(url, true)) },
-      ]);
+      setAsk({
+        title: t('armEnableAsk'),
+        choices: [
+          { text: t('powerOff'), destructive: true, onPress: () => send('arm', setArmPower(url, false)) },
+          { text: t('enable'), onPress: () => send('arm', setArmEnabled(url, true)) },
+        ],
+      });
     } else {
-      Alert.alert(t('armDisableAsk'), undefined, [
-        cancel,
-        { text: t('disable'), style: 'destructive', onPress: () => send('arm', setArmEnabled(url, false)) },
-      ]);
+      setAsk({
+        title: t('armDisableAsk'),
+        choices: [{ text: t('disable'), destructive: true, onPress: () => send('arm', setArmEnabled(url, false)) }],
+      });
     }
   };
 
@@ -97,14 +101,10 @@ export function StatusHud() {
     if (busyBody || (bodyNow !== 'enabled' && bodyNow !== 'disabled')) return;
     Haptics.selectionAsync().catch(() => {});
     const on = bodyNow === 'disabled';
-    Alert.alert(t(on ? 'bodyEnableAsk' : 'bodyDisableAsk'), undefined, [
-      { text: t('cancel'), style: 'cancel' },
-      {
-        text: t(on ? 'enable' : 'disable'),
-        style: on ? 'default' : 'destructive',
-        onPress: () => send('body', setBodyEnabled(connection.baseUrl, on)),
-      },
-    ]);
+    setAsk({
+      title: t(on ? 'bodyEnableAsk' : 'bodyDisableAsk'),
+      choices: [{ text: t(on ? 'enable' : 'disable'), destructive: !on, onPress: () => send('body', setBodyEnabled(connection.baseUrl, on)) }],
+    });
   };
 
   return (
@@ -154,6 +154,8 @@ export function StatusHud() {
           <Reading label={t('lift')} value={`${Math.round(body.liftMm)} mm`} size={small} />
         </View>
       )}
+
+      <ConfirmDialog request={ask} onClose={closeAsk} />
     </>
   );
 }

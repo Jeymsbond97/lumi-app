@@ -3,7 +3,7 @@ import { toSceneState } from '../sceneState';
 describe('toSceneState', () => {
   it('turns degrees into radians and millimetres into metres', () => {
     const s = toSceneState(
-      { battery: 50, charging: false, status: 'statusReady', armState: 'enabled',
+      { battery: 50, charging: false, status: 'statusReady', armState: 'enabled', armSilent: false,
         body: { liftMm: 400, waistDeg: 90, headYawDeg: -45, headPitchDeg: 30, enabled: true } },
       [0, 90, 0, 0, 180, 0],
     );
@@ -18,7 +18,7 @@ describe('toSceneState', () => {
 
   it('leaves out a disabled body, whose angles are not real', () => {
     const s = toSceneState(
-      { battery: 87, charging: true, status: 'statusReady', armState: 'off',
+      { battery: 87, charging: true, status: 'statusReady', armState: 'off', armSilent: false,
         body: { liftMm: -5.7, waistDeg: 17, headYawDeg: 8.2, headPitchDeg: -28.3, enabled: false } },
       null,
     );
@@ -26,7 +26,7 @@ describe('toSceneState', () => {
   });
 
   it('leaves out parts that did not answer so the robot keeps its last pose', () => {
-    const s = toSceneState({ battery: 50, charging: true, status: 'statusReady', armState: 'off', body: null }, null);
+    const s = toSceneState({ battery: 50, charging: true, status: 'statusReady', armState: 'off', armSilent: false, body: null }, null);
     expect(s).toEqual({ armState: 'off', charging: true });
   });
 });
