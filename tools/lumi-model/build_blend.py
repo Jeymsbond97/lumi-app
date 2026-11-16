@@ -21,6 +21,13 @@ HERE = os.path.dirname(os.path.abspath(__file__))
 DESC = os.path.expanduser("~/Documents/PROJECTS/JakaLumi_simulation/sim/lumi_description")
 URDF = os.path.join(DESC, "urdf", "jaka_lumi.urdf")
 MESHES = os.path.join(DESC, "meshes")
+# The arm's links from JAKA's MiniCobo STEP (jaka.com download centre, "MiniCobo&Mini2 2023-03-03"), each fitted
+# onto the URDF link it replaces (median gap 0.4-0.8 mm) and written in that link's frame, in metres; link_a4 keeps
+# JAKA's own placement (the URDF's a4 mesh was turned half a turn). The URDF's own arm meshes are simplified.
+ARM_MESHES = os.path.join(HERE, "assets", "minicobo")
+# The URDF puts link_a5 on the wrong side of link_a4's J5 face: in JAKA's assembly (and on the robot) it sits
+# 36.75 mm further along the J5 axis, so the flange's link meets the wrist from the other side. The axis is unchanged.
+JOINT_SHIFT = {"l_a5": (0.0, 0.03675, 0.0)}  # in the parent link's frame, m
 OUT = os.path.join(HERE, "work", "lumi.blend")
 FONT = "/System/Library/Fonts/Supplemental/Arial Bold Italic.ttf"
 
@@ -116,10 +123,10 @@ CUTS = {"base_link": [((0, 0, -0.2475), (0, 0, 1))]}
 LOGOS = [
     ("base_link", (0, 0, -0.176), (0, -1, 0), (1, 0, 0), 0.112),    # lower body front, the lamp sits under it
     ("link_a1", (0, 0, 0.156), (0, 1, 0), (0, 0, 1), 0.075),        # J2 housing cap, upside down in the photo
-    ("link_a5", (-0.040, 0, 0.027), (0, 0, -1), (-1, 0, 0), 0.066),  # middle of the J5 capsule, reads toward the flange
+    # the two on the arm's front (photos 2026-11-16): along the arm, read from the wrist toward the shoulder
+    ("link_a2", (0.015, 0, 0), (0, 0, 1), (-1, 0, 0), 0.075),        # J2 housing at the bottom of the upper arm
+    ("link_a4", (0, 0, 0.065), (0, 1, 0), (0, 0, -1), 0.065),        # J5 housing's flat cover under the flange's link
 ]
-# logos laid on an added part instead of the link's own mesh
-LOGO_TARGET = {"link_a5": "j5_housing"}
 WHOLE = {"wheel_l": "Rubber", "wheel_r": "Rubber", "link_a6": "Metal", "link_at": "Metal"}
 
 
@@ -275,44 +282,7 @@ def add_pod_bezels(bm, idx):
         print("pod bezel at", tuple(round(x, 3) for x in c), "turn", round(math.degrees(turn), 1))
 
 
-def dome_end(bm, center, axis, R, t_start, t_flat, depth):
-    """Turn the flat end of a round housing into a half ellipsoid.
-
-    center, axis: the housing axis (axis points out of the flat end); R: housing radius;
-    t_start: where the rounding starts on the wall; t_flat: the flat end; depth: how far
-    the new pole lies beyond t_start. Each vertex keeps its path length from the wall
-    to the centre, which becomes its angle on the ellipse, so the mesh stays in order."""
-    C, A = Vector(center), Vector(axis).normalized()
-    total = (t_flat - t_start) + R
-    for v in bm.verts:
-        d = v.co - C
-        t = d.dot(A)
-        radial = d - A * t
-        r = radial.length
-        if t <= t_start or r > R + 0.0005:
-            continue
-        u = (min(t, t_flat) - t_start) + max(0.0, R - r)
-        th = min(1.0, u / total) * math.pi / 2
-        out = radial * (R * math.cos(th) / r) if r > 1e-9 else radial
-        v.co = C + out + A * (t_start + depth * math.sin(th))
-
-
-J5_DEPTH = 0.014  # only rounds the edge of the flat end; the capsule housing covers it
-
-
-def shape_j5_a4(bm, idx):
-    """The J5 cap is flat in the STL; the real one is rounded like the other joints.
-    Two flat faces sit on top of each other there: the cup of link_a4 (axis -y through
-    (0, 0, 0.0802), flat at 0.055) and the end of link_a5 (axis -z, flat at z=-0.004).
-    Both get the same dome so they stay together."""
-    dome_end(bm, (0, 0, 0.0802), (0, -1, 0), 0.0375, 0.041, 0.055, J5_DEPTH)
-
-
-def shape_j5_a5(bm, idx):
-    dome_end(bm, (0, 0, 0), (0, 0, -1), 0.0375, -0.010, 0.004, J5_DEPTH)
-
-
-PAINTERS = {"link_4": paint_head, "base_link": paint_base, "link_a4": shape_j5_a4, "link_a5": shape_j5_a5}
+PAINTERS = {"link_4": paint_head, "base_link": paint_base}
 
 
 def import_stl(path):
@@ -370,31 +340,6 @@ def add_ring(parent, radius, tube, z, mat, name):
     o.parent = parent
     o.matrix_parent_inverse = Matrix.Identity(4)
     o.location = (0, 0, z)
-    return o
-
-
-def add_j5_housing(parent, mat):
-    """J5 in the STL is a small round cap at a corner, while J2 (and the real robot) shows a long
-    capsule with the logo in its middle. A capsule shell along link_a5 (local -x, toward the
-    flange) gives J5 the same look; it covers the round cap at its rounded end."""
-    a, b, zc, L = 0.042, 0.047, 0.027, 0.075      # half width, half depth, centre height, length: holds all of link_a5 up to the flange
-    bm = bmesh.new()
-    bmesh.ops.create_uvsphere(bm, u_segments=64, v_segments=32, radius=1.0)
-    for v in bm.verts:
-        x = v.co.x
-        v.co.x = x * a + (-L if x < 0 else 0.0)
-        v.co.y *= a
-        v.co.z = v.co.z * b + zc
-    me = bpy.data.meshes.new("j5_housing")
-    bm.to_mesh(me)
-    bm.free()
-    for p in me.polygons:
-        p.use_smooth = True
-    me.materials.append(mat)
-    o = bpy.data.objects.new("j5_housing", me)
-    bpy.context.scene.collection.objects.link(o)
-    o.parent = parent
-    o.matrix_parent_inverse = Matrix.Identity(4)
     return o
 
 
@@ -580,12 +525,13 @@ def main():
         links[name] = e
         mesh_el = l.find("visual/geometry/mesh")
         if mesh_el is not None:
-            path = os.path.join(MESHES, os.path.basename(mesh_el.get("filename")))
-            o = import_stl(path)
+            cad = os.path.join(ARM_MESHES, name + ".stl")
+            own = os.path.exists(cad)
+            o = import_stl(cad if own else os.path.join(MESHES, os.path.basename(mesh_el.get("filename"))))
             o.name = o.data.name = name + "_mesh"
             o.parent = e
             o.matrix_parent_inverse = Matrix.Identity(4)
-            o.matrix_basis = origin_matrix(l.find("visual/origin"))
+            o.matrix_basis = Matrix.Identity(4) if own else origin_matrix(l.find("visual/origin"))
             prepare_mesh(o, name, mats)
             meshes[name] = o
 
@@ -596,6 +542,8 @@ def main():
         bpy.context.scene.collection.objects.link(je)
         je.parent = links[parent]
         je.matrix_basis = origin_matrix(j.find("origin"))
+        if name in JOINT_SHIFT:
+            je.matrix_basis = Matrix.Translation(JOINT_SHIFT[name]) @ je.matrix_basis
         je["urdf_type"] = j.get("type")
         c = links[child]
         c.parent = je
@@ -615,13 +563,11 @@ def main():
     add_ring(links["link_a1"], 0.05, 0.0045, 0.012, mats["Green"], "ring_shoulder")
     add_lamp(links["base_link"], mats)
     add_brand_logo(links["link_2"])
-    housing = add_j5_housing(links["link_a5"], mats["Shell"])
     add_front_sensors(links["base_link"], mats)
 
     # JAKA logos where the real robot has them (photos in JakaLumi_simulation)
     for link, center, normal, reading, width in LOGOS:
-        target = housing if LOGO_TARGET.get(link) == "j5_housing" else meshes[link]
-        add_logo(links[link], target, center, normal, reading, width, mats["Logo"], "logo_" + link)
+        add_logo(links[link], meshes[link], center, normal, reading, width, mats["Logo"], "logo_" + link)
 
     os.makedirs(os.path.dirname(OUT), exist_ok=True)
     bpy.ops.wm.save_as_mainfile(filepath=OUT)
