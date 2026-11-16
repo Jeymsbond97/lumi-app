@@ -2,7 +2,7 @@
 // the modes, the current task, the sections and STOP sit on top of each screen.
 // While the landing view still covers the screen nothing shows over it (see lib/landing).
 import { StyleSheet, View } from 'react-native';
-import { Stack } from 'expo-router';
+import { Tabs, usePathname } from 'expo-router';
 import Animated, { FadeIn } from 'react-native-reanimated';
 import { RobotProvider } from '../../lib/robot';
 import { LandingProvider, useLanding } from '../../lib/landing';
@@ -17,11 +17,12 @@ import { colors } from '../../ui/theme';
 
 function Controls() {
   const { covering } = useLanding();
+  const path = usePathname();
   if (covering) return null;
   return (
     <Animated.View style={StyleSheet.absoluteFill} entering={FadeIn.duration(450)} pointerEvents="box-none">
       <BatteryBadge />
-      <ModesPanel />
+      {path !== '/map' && <ModesPanel /> /* the map needs the room; its navbar has its own controls */}
       <TaskCard />
       <Dock />
       {/* the status bar's confirm dialog covers everything here but STOP */}
@@ -43,7 +44,16 @@ export default function RobotLayout() {
             return false;
           }}
         >
-          <Stack screenOptions={{ headerShown: false, contentStyle: { backgroundColor: colors.bg }, animation: 'fade' }} />
+          {/* Tabs, not a stack: a section stays alive while another is open, so Home's 3D scene is not loaded again
+              (going back to Home from Map showed the loading visor under the controls). Our own Dock is the tab bar. */}
+          <Tabs
+            tabBar={() => null}
+            screenOptions={{ headerShown: false, sceneStyle: { backgroundColor: colors.bg }, animation: 'fade' }}
+          >
+            {/* every section has to be declared, else this router draws nothing */}
+            <Tabs.Screen name="home" />
+            <Tabs.Screen name="map" />
+          </Tabs>
           <Controls />
         </View>
       </LandingProvider>

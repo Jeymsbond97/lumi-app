@@ -21,7 +21,7 @@ export const SECTIONS: Section[] = [
   { label: 'tabHome', route: '/home', path: '/home' },
   { label: 'tabCommands', route: null, path: '/commands' },
   { label: 'tabDrive', route: null, path: '/drive' },
-  { label: 'tabMap', route: null, path: '/map' },
+  { label: 'tabMap', route: '/map', path: '/map' },
   { label: 'tabTalk', route: null, path: '/talk' },
 ];
 
