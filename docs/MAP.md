@@ -23,24 +23,23 @@ while Map is open (Tabs in `src/app/(robot)/_layout.tsx`), so going back does no
 | Action | How | Robot |
 |---|---|---|
 | Send Lumi | tap a marker (or MARKERS ▾) or a point, GO | `/agv/go`, `/agv/go_point` |
-| Save a marker | MARKERS ▾ → + Save a marker where Lumi is, or a tapped point → SAVE; name: letters, digits, `_`, `-` | `/map/marker` |
-| Delete a marker | MARKERS ▾ → ✕ (not the charger's) | `/map/marker/delete` |
+| Save a marker | MARKERS ▾ → + Add marker (at the top; where Lumi is), or a tapped point → SAVE; name: letters, digits, `_`, `-` | `/map/marker` |
+| Edit a marker | MARKERS ▾ → ✎: a new name (saved again under it, then the old one deleted), MOVE TO LUMI, DELETE; a charger's marker stays one (type 11) and its delete warns that Lumi then cannot dock | `/map/marker`, `/map/marker/delete` |
+| Drive a route | the ROUTE pill in the map's top left corner opens a card there (a tap on its title closes it): + Add stop ▾ or tap markers on the map, in order; Wait (s, 0 = no wait), Loop there and back, Times (0 = until stopped; needs Greeter or Patrol on), START; the bar shows 2/4 and the stop; CANCEL | `/agv/route` (one marker: `/agv/go`), `GET /agv/route`, `/agv/cancel` |
 | Switch maps | MAPS ▾ → a map, confirm; reloads after 15 s; correct the position after | `/map/switch` |
 | Drive by hand | CONTROL shows the joystick | `/jog` |
 | See no-go lines | always drawn in red; they are drawn and edited in the base's web page (:9001) | `/map/info` `lines` (base `/forbidden_manager/action_service` list_lines over rosbridge) |
 
-## Position correction (POSITION ▾)
+## Position correction (POSITION)
 
 Like the base's own page (Thor `docs/05_AGV_BASE.md` §2.4):
 
-1. **Tap or drag on the map.** The new pose starts where the base believes Lumi is. The lidar (`/map/scan`, once a
+1. **POSITION** opens it at once: a purple Lumi (the new pose) starts where the base believes Lumi is. The lidar (`/map/scan`, once a
    second) is drawn twice: **red** at the pose the base believes, **purple** at the new pose.
-2. Move the new pose until the purple dots sit on the walls: the arrows move it 5 cm, ⟲ ⟳ turn it 2°; a tap puts it
-   there, a drag also sets where Lumi faces.
-3. **SET POSITION**, confirm. Within about 20 cm and 5° is enough; the base refines the rest. Only while the base is
+2. Move it until the purple dots sit on the walls: the arrows (right) move it 5 cm, ⟲ ⟳ turn it 2°, and keep going
+   while held; a tap on the map puts it there, a drag also sets where Lumi faces.
+3. **SAVE**, confirm (or CANCEL). Within about 20 cm and 5° is enough; the base refines the rest. Only while the base is
    free (idle or stopped).
-
-Or **Lumi is at** → a marker: the pose is taken from that marker (quickest after a map switch).
 
 ## Code
 
@@ -53,4 +52,5 @@ Or **Lumi is at** → a marker: the pose is taken from that marker (quickest aft
 ## In a browser
 
 `npx expo start --web` runs the app in a browser for review (the 3D scene in an iframe). The robot API has no CORS,
-so the browser needs a local proxy on 127.0.0.1:8100 and the connection's USB route.
+so the browser needs a local proxy on 127.0.0.1:8100 and the connection's USB route: `npm run webproxy` (adds the
+CORS headers), then open http://localhost:8081.

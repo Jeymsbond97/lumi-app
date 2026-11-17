@@ -267,9 +267,9 @@ export const mapImageUrl = (baseUrl: string, m: MapInfo, v: number) =>
 export const goMarker = (baseUrl: string, marker: string) => post(baseUrl, '/agv/go', { marker });
 export const goPoint = (baseUrl: string, x: number, y: number, theta: number) =>
   post(baseUrl, '/agv/go_point', { x, y, theta });
-/** A marker where Lumi stands (no x, y) or at a point of the map. */
-export const saveMarker = (baseUrl: string, name: string, at?: { x: number; y: number; theta: number }) =>
-  post(baseUrl, '/map/marker', { name, ...at });
+/** A marker where Lumi stands (no x, y) or at a point of the map; `charger`: the base docks with it. */
+export const saveMarker = (baseUrl: string, name: string, at?: { x: number; y: number; theta: number }, charger = false) =>
+  post(baseUrl, '/map/marker', { name, ...at, charger });
 export const deleteMarker = (baseUrl: string, name: string) => post(baseUrl, '/map/marker/delete', { name });
 /** Drive through markers in order; `loop`: there and back `rounds` times (0 = until stopped), needs the assistant.
  * Refused (BusyError) when loop is asked without Greeter or Patrol on. Says who drives it: the API or the assistant. */
@@ -295,8 +295,6 @@ export const cancelDrive = (baseUrl: string) => post(baseUrl, '/agv/cancel');
 /** Tell the base where Lumi is on the map (after a map switch, or when its icon is off). */
 export const setPosition = (baseUrl: string, x: number, y: number, theta: number) =>
   post(baseUrl, '/map/position', { x, y, theta });
-/** Lumi stands at this marker: the base takes its place and heading from it. */
-export const setPositionAtMarker = (baseUrl: string, name: string) => post(baseUrl, '/map/position/marker', { name });
 /** What the lidar sees now: points [x ahead, y left] (m) around the base (lumi-wave /map/scan). */
 export async function getScan(baseUrl: string, timeoutMs = 5000): Promise<number[][]> {
   return (await getJson<{ points?: number[][] }>(baseUrl, '/map/scan', timeoutMs)).points ?? [];
