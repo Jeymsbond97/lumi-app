@@ -42,6 +42,20 @@ describe('toMapInfo', () => {
     expect(m.name).toBe('cutshion_708_B_block');
     expect(m.markers.map((k) => [k.name, k.dock])).toEqual([['Home', true], ['p1', false], ['p2', false]]);
     expect(m.maps).toEqual([{ name: 'KINTEX', floor: 1 }, { name: 'cutshion_708_B_block', floor: 1 }]);
+    expect(m.lines).toEqual([]);
+  });
+
+  it('reads the no-go lines and drops one without two points', () => {
+    const m = toMapInfo({
+      ...RAW,
+      lines: [
+        { name: 'door', points: [[-2.31, 9.34], [-2.31, 8.26], [-2.05, 8]] },
+        { name: 'dot', points: [[1, 1]] },
+      ],
+    });
+    expect(m.lines).toEqual([
+      { name: 'door', points: [{ x: -2.31, y: 9.34 }, { x: -2.31, y: 8.26 }, { x: -2.05, y: 8 }] },
+    ]);
   });
 });
 

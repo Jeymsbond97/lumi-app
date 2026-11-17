@@ -496,6 +496,22 @@ export default function MapScreen() {
             onError={() => setFailed(true)}
           />
         )}
+        {info && scale > 0 && info.lines.length > 0 && (
+          <Svg width={frame.w} height={frame.h} style={StyleSheet.absoluteFill} pointerEvents="none">
+            {info.lines.map((l) => (
+              <Path
+                key={l.name}
+                d={l.points.map((q, i) => `${i ? 'L' : 'M'}${toView(q.x, q.y).x} ${toView(q.x, q.y).y}`).join(' ')}
+                stroke={mono.red}
+                strokeOpacity={0.85}
+                strokeWidth={2}
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                fill="none"
+              />
+            ))}
+          </Svg>
+        )}
         {info?.markers.map((m) => {
           const p = toView(m.x, m.y);
           const on = picked === m.name;

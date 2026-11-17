@@ -22,6 +22,8 @@ export interface MapInfo {
   originX: number;
   originY: number;
   markers: MapMarker[];
+  /** No-go lines drawn in the base's web page (the base never drives across them), map frame metres. */
+  lines: { name: string; points: { x: number; y: number }[] }[];
   maps: { name: string; floor: number }[];
 }
 
@@ -35,6 +37,7 @@ interface RawMapInfo {
   origin_y?: number;
   markers?: { name: string; type?: number; x: number; y: number; theta?: number }[];
   main_dock?: string | null;
+  lines?: { name: string; points?: number[][] }[];
   maps?: { name: string; floors?: number[] }[];
 }
 
@@ -55,6 +58,9 @@ export function toMapInfo(raw: RawMapInfo): MapInfo {
       theta: m.theta ?? 0,
       dock: m.name === dock || m.type === 11,
     })),
+    lines: (raw.lines ?? [])
+      .map((l) => ({ name: l.name, points: (l.points ?? []).map(([x, y]) => ({ x, y })) }))
+      .filter((l) => l.points.length >= 2),
     maps: (raw.maps ?? []).flatMap((m) => (m.floors?.length ? m.floors : [1]).map((floor) => ({ name: m.name, floor }))),
   };
 }

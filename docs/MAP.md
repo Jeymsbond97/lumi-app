@@ -27,6 +27,7 @@ while Map is open (Tabs in `src/app/(robot)/_layout.tsx`), so going back does no
 | Delete a marker | MARKERS ▾ → ✕ (not the charger's) | `/map/marker/delete` |
 | Switch maps | MAPS ▾ → a map, confirm; reloads after 15 s; correct the position after | `/map/switch` |
 | Drive by hand | CONTROL shows the joystick | `/jog` |
+| See no-go lines | always drawn in red; they are drawn and edited in the base's web page (:9001) | `/map/info` `lines` (base `/forbidden_manager/action_service` list_lines over rosbridge) |
 
 ## Position correction (POSITION ▾)
 
