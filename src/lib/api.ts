@@ -2,6 +2,7 @@ import { fetchWithTimeout } from './connection';
 import type { TextKey } from './i18n';
 import type { AxisCommand } from './drive';
 import { toMapInfo, type MapInfo } from './mapGeom';
+import { toRouteProgress, type RouteProgress } from './route';
 
 // Shapes of lumi-api replies (lumi-wave api/server.py), only the parts the app reads.
 // A part that does not answer comes back as { error: "..." } instead.
@@ -270,16 +271,37 @@ export const goPoint = (baseUrl: string, x: number, y: number, theta: number) =>
 export const saveMarker = (baseUrl: string, name: string, at?: { x: number; y: number; theta: number }) =>
   post(baseUrl, '/map/marker', { name, ...at });
 export const deleteMarker = (baseUrl: string, name: string) => post(baseUrl, '/map/marker/delete', { name });
+/** Drive through markers in order; `loop`: there and back `rounds` times (0 = until stopped), needs the assistant.
+ * Refused (BusyError) when loop is asked without Greeter or Patrol on. Says who drives it: the API or the assistant. */
+export async function startRoute(
+  baseUrl: string,
+  markers: string[],
+  opts: { pause: number; loop: boolean; rounds: number },
+): Promise<'api' | 'assistant'> {
+  try {
+    const r = await post(baseUrl, '/agv/route', { markers, ...opts });
+    return (r as { by?: string }).by === 'assistant' ? 'assistant' : 'api';
+  } catch (e) {
+    if (e instanceof Error && e.message.endsWith('HTTP 409')) throw new BusyError('busy');
+    throw e;
+  }
+}
+/** Progress of the last route the API drove (not one the assistant drives). */
+export async function getRoute(baseUrl: string, timeoutMs = 3000): Promise<RouteProgress | null> {
+  return toRouteProgress(await getJson<Parameters<typeof toRouteProgress>[0]>(baseUrl, '/agv/route', timeoutMs));
+}
+/** Stops the drive and the route. */
+export const cancelDrive = (baseUrl: string) => post(baseUrl, '/agv/cancel');
 /** Tell the base where Lumi is on the map (after a map switch, or when its icon is off). */
 export const setPosition = (baseUrl: string, x: number, y: number, theta: number) =>
   post(baseUrl, '/map/position', { x, y, theta });
+/** Lumi stands at this marker: the base takes its place and heading from it. */
+export const setPositionAtMarker = (baseUrl: string, name: string) => post(baseUrl, '/map/position/marker', { name });
 /** What the lidar sees now: points [x ahead, y left] (m) around the base (lumi-wave /map/scan). */
 export async function getScan(baseUrl: string, timeoutMs = 5000): Promise<number[][]> {
   return (await getJson<{ points?: number[][] }>(baseUrl, '/map/scan', timeoutMs)).points ?? [];
 }
 
-/** Lumi stands at this marker: the base takes its place and heading from it. */
-export const setPositionAtMarker = (baseUrl: string, name: string) => post(baseUrl, '/map/position/marker', { name });
 /** The base restarts with the other map; Lumi's position is set after. */
 export const switchMap = (baseUrl: string, name: string, floor: number) =>
   post(baseUrl, '/map/switch', { map_name: name, floor }, 15000);
