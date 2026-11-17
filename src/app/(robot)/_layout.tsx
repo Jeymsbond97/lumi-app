@@ -7,6 +7,7 @@ import Animated, { FadeIn } from 'react-native-reanimated';
 import { RobotProvider } from '../../lib/robot';
 import { LandingProvider, useLanding } from '../../lib/landing';
 import { noteTouch } from '../../lib/driveLock';
+import { useCameraOpen } from '../../lib/cameraOpen';
 import { StatusHud } from '../../ui/StatusHud';
 import { BatteryBadge } from '../../ui/BatteryBadge';
 import { ModesPanel } from '../../ui/ModesPanel';
@@ -18,15 +19,16 @@ import { colors } from '../../ui/theme';
 function Controls() {
   const { covering } = useLanding();
   const path = usePathname();
+  const camera = useCameraOpen(); // Home's camera panel covers where the readings and the task card sit
   if (covering) return null;
   return (
     <Animated.View style={StyleSheet.absoluteFill} entering={FadeIn.duration(450)} pointerEvents="box-none">
       <BatteryBadge />
       {path !== '/map' && <ModesPanel /> /* the map needs the room; its navbar has its own controls */}
-      <TaskCard />
+      {!camera && <TaskCard />}
       <Dock />
       {/* the status bar's confirm dialog covers everything here but STOP */}
-      <StatusHud />
+      <StatusHud hideReadings={camera} />
       <StopButton />
     </Animated.View>
   );

@@ -32,7 +32,7 @@ const STATE_DOT: Partial<Record<TextKey, string>> = {
 };
 
 
-export function StatusHud() {
+export function StatusHud({ hideReadings = false }: { hideReadings?: boolean }) {
   const { t } = useI18n();
   const { connection, status } = useRobot();
   const { height: h } = useWindowDimensions();
@@ -147,7 +147,7 @@ export function StatusHud() {
         </View>
       )}
 
-      {bodyPoseKnown(body) && (
+      {bodyPoseKnown(body) && !hideReadings && (
         <View style={[styles.readings, { right: 24 + inset.right, top: 14 + inset.top + 52 }]} pointerEvents="none">
           <Reading label={t('head')} value={`${Math.round(body.headYawDeg)}°`} size={small} />
           <Reading label={t('waist')} value={`${Math.round(body.waistDeg)}°`} size={small} />

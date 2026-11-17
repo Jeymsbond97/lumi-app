@@ -6,6 +6,7 @@ import { WebView, type WebViewMessageEvent, type WebViewProps } from 'react-nati
 import { SCENE_HTML } from '../../scene/sceneHtml';
 import { toSceneState, type SceneState } from '../../scene/sceneState';
 import { Joystick } from '../../ui/Joystick';
+import { CameraPanel } from '../../ui/CameraPanel';
 import { useRobot } from '../../lib/robot';
 import { colors } from '../../ui/theme';
 import { ConnectingView } from '../../ui/ConnectingView';
@@ -141,6 +142,8 @@ export default function Home() {
         />
       )}
       <Joystick />
+      {/* the cameras open from the right edge, between the battery and the joystick */}
+      {sceneReady && <CameraPanel />}
       {/* Lumi keeps looking at you until the 3D robot is drawn, then the scene shows through */}
       {!sceneReady && (
         <Animated.View style={StyleSheet.absoluteFill} exiting={FadeOut.duration(450)} pointerEvents="none">

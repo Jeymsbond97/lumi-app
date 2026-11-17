@@ -157,6 +157,13 @@ const en = {
   stepWaiting: 'Waiting',
   // settings
   language: 'Language',
+  // cameras on Home
+  cameraOpen: 'Show cameras',
+  cameraClose: 'Hide cameras',
+  cameraHead: 'Head',
+  cameraTorso: 'Torso',
+  cameraWaiting: 'Waiting for picture',
+  cameraNoPicture: 'No picture',
 };
 
 export type TextKey = keyof typeof en;
@@ -300,6 +307,12 @@ const ko: Record<TextKey, string> = {
   stepSpeaking: '말하는 중',
   stepWaiting: '기다리는 중',
   language: '언어',
+  cameraOpen: '카메라 보기',
+  cameraClose: '카메라 닫기',
+  cameraHead: '머리',
+  cameraTorso: '몸통',
+  cameraWaiting: '영상을 기다리는 중',
+  cameraNoPicture: '영상 없음',
 };
 
 const STRINGS: Record<Lang, Record<TextKey, string>> = { en, ko };
