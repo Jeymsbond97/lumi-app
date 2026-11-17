@@ -2,6 +2,7 @@ import { fetchWithTimeout } from './connection';
 import type { TextKey } from './i18n';
 import type { AxisCommand } from './drive';
 import { toMapInfo, type MapInfo } from './mapGeom';
+import { toScanPicture, toScanState, type ScanPicture, type ScanState } from './mapping';
 import { toRouteProgress, type RouteProgress } from './route';
 
 // Shapes of lumi-api replies (lumi-wave api/server.py), only the parts the app reads.
@@ -307,6 +308,33 @@ export async function getScan(baseUrl: string, timeoutMs = 5000): Promise<number
 /** The base restarts with the other map; Lumi's position is set after. */
 export const switchMap = (baseUrl: string, name: string, floor: number) =>
   post(baseUrl, '/map/switch', { map_name: name, floor }, 15000);
+
+// ---------- a new map (lumi-wave /map/scan/*, see mapping.ts) ----------
+/** A refusal (HTTP 409: busy, a scan runs already, the name is taken) as a BusyError. */
+async function orBusy<T>(call: Promise<T>): Promise<T> {
+  try {
+    return await call;
+  } catch (e) {
+    if (e instanceof Error && e.message.endsWith('HTTP 409')) throw new BusyError('busy');
+    throw e;
+  }
+}
+export async function getScanState(baseUrl: string, timeoutMs = 5000): Promise<ScanState> {
+  return toScanState(await getJson<Parameters<typeof toScanState>[0]>(baseUrl, '/map/scan/state', timeoutMs));
+}
+/** The new map as it grows; null when it has no picture yet. */
+export async function getScanPicture(baseUrl: string, name: string, floor: number, timeoutMs = 10000): Promise<ScanPicture | null> {
+  return toScanPicture(await getJson<Parameters<typeof toScanPicture>[0]>(baseUrl, '/map/scan/picture?dark=true', timeoutMs), name, floor);
+}
+/** Starts scanning a new map under `name` (the base leaves the current map until another one is switched to). */
+export const startScan = (baseUrl: string, name: string) => orBusy(post(baseUrl, '/map/scan/start', { name }, 40000));
+/** Saves the new map; the base answers once it is saved, which can take a while. */
+export const saveScan = (baseUrl: string) => orBusy(post(baseUrl, '/map/scan/save', undefined, 190000));
+/** Stops scanning and deletes the new map; `deleted` false when the base kept it (it stays in MAPS). */
+export async function cancelScan(baseUrl: string): Promise<{ deleted: boolean }> {
+  const r = await orBusy(post(baseUrl, '/map/scan/cancel', undefined, 190000));
+  return { deleted: (r as { deleted?: boolean }).deleted === true };
+}
 
 export async function setMode(baseUrl: string, mode: Mode, on: boolean): Promise<Modes> {
   return toModes((await post(baseUrl, '/assistant/modes', { [mode]: on }, 10000)) as RawModes);

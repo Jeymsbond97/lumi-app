@@ -1,7 +1,8 @@
 // The Map screen (owner's pick A2, 2026-11-16): the base's map in the middle with Lumi's live place and heading and the
 // markers; a floating navbar on top (CONTROL, MARKERS, ROUTE, POSITION, MAPPING, MAPS, SETTINGS) with drop-down lists;
 // a small bar at the bottom for what is picked (a marker or a tapped point): SAVE and GO, or SET POSITION.
-// Route, mapping and settings come later (PLAN.md "Map section").
+// MAPPING makes a new map: a name, then the growing map with Lumi on it, the joystick, SAVE or CANCEL (docs/MAP.md).
+// Settings come later (PLAN.md "Map section").
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import {
   Image,
@@ -20,20 +21,26 @@ import Svg, { Circle, Path, Rect } from 'react-native-svg';
 import {
   BusyError,
   cancelDrive,
+  cancelScan,
   deleteLine,
   deleteMarker,
   getMapInfo,
   getRoute,
   getScan,
+  getScanPicture,
+  getScanState,
   goMarker,
   goPoint,
   mapImageUrl,
   saveLine,
   saveMarker,
+  saveScan,
   setPosition,
   startRoute,
+  startScan,
   switchMap,
 } from '../../lib/api';
+import { keepPicture, progressText, saveEarly, validNewMapName, type ScanPicture, type ScanState } from '../../lib/mapping';
 import { addStop, keepKnown, PAUSE_MAX_S, removeStopAt, ROUNDS_MAX, stopNumbers, type RouteProgress } from '../../lib/route';
 import {
   clampOffset,
@@ -59,7 +66,8 @@ import { NameDialog } from '../../ui/NameDialog';
 import { colors, fonts, mono } from '../../ui/theme';
 
 const NOTE_MS = 2500;
-const SWITCH_WAIT_MS = 15000; // the base restarts with another map before it answers again
+const SWITCH_EVERY_MS = 2000; // after a switch: /map/info this often until it names the new map
+const SWITCH_GIVE_UP_MS = 90000; // the base restarts with the other map; it has always been back well before this
 const ZOOM_STEP = 1.5; // one press of + or -
 const TAP_PX = 8; // a touch that moved less than this is a tap (picks a point), more is a drag (moves the map)
 const DOCK_SPACE = 64; // room the sections dock takes at the bottom, above the safe area
@@ -70,6 +78,9 @@ const REPEAT_AFTER_MS = 400; // an arrow held this long starts repeating
 const REPEAT_MS = 90; // then one step this often
 const GRAB_PX = 22; // a finger this close to a drawn point moves it
 const ROUTE_EVERY_MS = 1000; // a route's progress while the API drives it
+const MAPPING_STATE_MS = 1000; // making a new map: Lumi's pose and the optimizing progress
+const MAPPING_PICTURE_MS = 1500; // and the growing map (the base draws it about once a second)
+const SAVED_RELOAD_MS = 3000; // the new map shows in MAPS a moment after it is saved
 
 type Item = 'control' | 'markers' | 'lines' | 'route' | 'position' | 'mapping' | 'maps' | 'settings';
 type Menu = 'markers' | 'lines' | 'maps' | 'route';
@@ -78,7 +89,7 @@ const ITEMS: { key: Item; label: TextKey; list?: boolean; soon?: boolean }[] = [
   { key: 'markers', label: 'mapMarkers', list: true },
   { key: 'lines', label: 'mapLines', list: true },
   { key: 'position', label: 'mapPosition' },
-  { key: 'mapping', label: 'mapMapping', soon: true },
+  { key: 'mapping', label: 'mapMapping' },
   { key: 'maps', label: 'mapMaps', list: true },
   { key: 'settings', label: 'mapSettings', soon: true },
 ];
@@ -274,7 +285,14 @@ export default function MapScreen() {
   const inset = useSafeAreaInsets();
   const { width: w, height: h } = useWindowDimensions();
 
-  const [info, setInfo] = useState<MapInfo | null>(null);
+  const [mapInfo, setInfo] = useState<MapInfo | null>(null); // the base's current map
+  // making a new map: what the base says about it, the picture shown and the next one (shown once it has loaded)
+  const [scanning, setScanning] = useState<ScanState | null>(null);
+  const [scanPic, setScanPic] = useState<ScanPicture | null>(null);
+  const [nextPic, setNextPic] = useState<ScanPicture | null>(null);
+  const [scanBusy, setScanBusy] = useState(false); // saving or cancelling: the base answers when it is done
+  // while mapping the screen shows the new map instead (no markers or lines yet)
+  const info = scanning ? (scanPic?.info ?? null) : mapInfo;
   const [version, setVersion] = useState(0);
   const [failed, setFailed] = useState(false);
   const [frame, setFrame] = useState({ x: 0, y: 0, w: 0, h: 0 }); // the map's frame on the screen
@@ -296,7 +314,7 @@ export default function MapScreen() {
   const [aim, setAim] = useState<number | null>(null); // the heading dragged out while setting the position, rad
   const [scan, setScan] = useState<number[][] | null>(null); // the lidar now, around the base
   const [ask, setAsk] = useState<ConfirmRequest | null>(null);
-  const [naming, setNaming] = useState<'marker' | 'line' | null>(null); // the name dialog, for what
+  const [naming, setNaming] = useState<'marker' | 'line' | 'map' | null>(null); // the name dialog, for what
   const [drawing, setDrawing] = useState<{ x: number; y: number }[] | null>(null); // a new no-go line's points
   const [litLine, setLitLine] = useState<string | null>(null); // the line picked in LINES, drawn brighter
   const [editLine, setEditLine] = useState<string | null>(null); // the line in the edit dialog
@@ -314,6 +332,73 @@ export default function MapScreen() {
     );
   }, [url]);
   useEffect(load, [load]);
+
+  // a new map being made already (the app was closed while scanning, or the base's own page started it): show it
+  useEffect(() => {
+    let alive = true;
+    getScanState(url).then(
+      (s) => {
+        if (!alive || !s.mapping) return;
+        setScanning(s);
+        setControl(true);
+      },
+      () => {},
+    );
+    return () => {
+      alive = false;
+    };
+  }, [url]);
+  const mapping = scanning !== null;
+  const scanName = scanning?.name ?? '';
+  const scanFloor = scanning?.floor ?? 1;
+  // while mapping: the state each second (pose, progress; it may end on the robot), the picture a little less often.
+  // One request at a time each, so a slow answer never piles them up. Not while it saves: the scan ends then.
+  useEffect(() => {
+    if (!mapping || scanBusy) return;
+    let alive = true;
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    const read = () =>
+      getScanState(url)
+        .then(
+          (s) => {
+            if (!alive) return;
+            if (s.mapping) return setScanning(s);
+            setScanning(null);
+            setNote({ key: 'mapScanEnded' });
+            load();
+          },
+          () => {},
+        )
+        .finally(() => {
+          if (alive) timer = setTimeout(read, MAPPING_STATE_MS);
+        });
+    timer = setTimeout(read, MAPPING_STATE_MS);
+    return () => {
+      alive = false;
+      clearTimeout(timer);
+    };
+  }, [mapping, scanBusy, url, load]);
+  useEffect(() => {
+    if (!mapping) return;
+    let alive = true;
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    const read = () =>
+      getScanPicture(url, scanName, scanFloor)
+        .then(
+          (p) => alive && p && setNextPic(p),
+          () => {},
+        )
+        .finally(() => {
+          if (alive) timer = setTimeout(read, MAPPING_PICTURE_MS);
+        });
+    read();
+    return () => {
+      alive = false;
+      clearTimeout(timer);
+      setScanPic(null);
+      setNextPic(null);
+    };
+  }, [mapping, url, scanName, scanFloor]);
 
   // a route: markers in the order picked, how long to wait at each, there and back
   const [stopsPicked, setStops] = useState<string[]>([]);
@@ -530,7 +615,7 @@ export default function MapScreen() {
   const failedNote = (e: unknown) => setNote({ key: e instanceof BusyError ? 'busy' : 'noAnswer', bad: true });
 
   const tap = (vx: number, vy: number) => {
-    if (!info || scale === 0) return;
+    if (!info || scale === 0 || mapping) return; // the new map has nothing to pick yet
     if (menu !== 'route') setMenu(null); // the route's panel stays while picking
     const px = (vx - offset.x) / scale;
     const py = (vy - offset.y) / scale;
@@ -607,6 +692,37 @@ export default function MapScreen() {
         },
       ],
     });
+  // a switch is done when /map/info names the new map: one reload after a fixed wait missed a slow restart (2026-11-17)
+  const [switching, setSwitching] = useState<string | null>(null);
+  useEffect(() => {
+    if (!switching) return;
+    let alive = true;
+    const started = Date.now();
+    const id = setInterval(() => {
+      if (Date.now() - started > SWITCH_GIVE_UP_MS) {
+        setSwitching(null);
+        setNote({ key: 'noAnswer', bad: true });
+        load();
+        return;
+      }
+      getMapInfo(url).then(
+        (m) => {
+          if (!alive || m.name !== switching) return;
+          setSwitching(null);
+          setInfo(m);
+          setVersion(Date.now());
+          setFailed(false);
+          setNote({ key: 'mapSwitched' });
+        },
+        () => {}, // restarting
+      );
+    }, SWITCH_EVERY_MS);
+    return () => {
+      alive = false;
+      clearInterval(id);
+    };
+  }, [switching, url, load]);
+
   const switchTo = (name: string, floor: number) =>
     setAsk({
       title: `${t('mapSwitchAsk')} ${name}`,
@@ -615,12 +731,9 @@ export default function MapScreen() {
           text: t('mapMaps'),
           onPress: () => {
             setMenu(null);
-            switchMap(url, name, floor).then(() => {
-              setNote({ key: 'mapSwitched' });
-              setPicked(null);
-              setPoint(null);
-              setTimeout(load, SWITCH_WAIT_MS);
-            }, failedNote);
+            setPicked(null);
+            setPoint(null);
+            switchMap(url, name, floor).then(() => setSwitching(name), failedNote);
           },
         },
       ],
@@ -651,9 +764,88 @@ export default function MapScreen() {
     }, failedNote);
   };
 
+  // MAPPING: a name, a confirm, then the base scans while Lumi is driven by the joystick
+  const beginMapping = () => {
+    setMenu(null);
+    setPositioning(false);
+    setScan(null);
+    setDrawing(null);
+    setPicked(null);
+    setPoint(null);
+    setLitLine(null);
+    setNaming('map');
+  };
+  const startMapping = (name: string) => {
+    setNaming(null);
+    setAsk({
+      title: t('mapScanAsk'),
+      choices: [
+        {
+          text: t('mapScanStart'),
+          onPress: () =>
+            startScan(url, name).then(() => {
+              setScanning({ mapping: true, name, floor: 1, pose: null, progress: null });
+              setControl(true);
+              setNote({ key: 'mapScanHint' });
+            }, failedNote),
+        },
+      ],
+    });
+  };
+  const endMapping = (key: TextKey) => {
+    setScanBusy(false);
+    setScanning(null);
+    setControl(false);
+    setNote({ key });
+    setTimeout(load, SAVED_RELOAD_MS);
+  };
+  const saveMapping = () =>
+    setAsk({
+      title: saveEarly(scanning?.progress ?? null) ? t('mapScanSaveEarly') : t('mapScanSaveAsk'),
+      choices: [
+        {
+          text: t('mapSave'),
+          onPress: () => {
+            setScanBusy(true);
+            saveScan(url).then(
+              () => endMapping('mapScanSaved'),
+              (e) => {
+                setScanBusy(false);
+                failedNote(e);
+              },
+            );
+          },
+        },
+      ],
+    });
+  const cancelMapping = () =>
+    setAsk({
+      title: t('mapScanCancelAsk'),
+      choices: [
+        {
+          text: t('delete'),
+          destructive: true,
+          onPress: () => {
+            setScanBusy(true);
+            cancelScan(url).then(
+              (r) => endMapping(r.deleted ? 'mapScanDeleted' : 'mapScanKept'),
+              (e) => {
+                setScanBusy(false);
+                failedNote(e);
+              },
+            );
+          },
+        },
+      ],
+    });
+
+  /** While mapping only CONTROL works (and MAPPING shows it is on); the rest needs the base's map. */
+  const offWhileMapping = (key: Item) => mapping && key !== 'control' && key !== 'mapping';
   const press = (item: (typeof ITEMS)[number]) => {
     Haptics.selectionAsync().catch(() => {});
     if (item.soon) return setNote({ key: 'soon' });
+    if (offWhileMapping(item.key)) return setNote({ key: 'mapScanFirst' });
+    if (item.key === 'mapping') return mapping ? undefined : beginMapping();
     if (item.list) return setMenu((m) => (m === item.key ? null : (item.key as Menu)));
     setMenu(null);
     if (item.key === 'position') return startPositioning(!positioning);
@@ -732,7 +924,8 @@ export default function MapScreen() {
     setAim((a) => (a ?? heading) + d);
   };
 
-  const lumi = status?.pose && info ? toView(status.pose.x, status.pose.y) : null;
+  const pose = scanning ? scanning.pose : (status?.pose ?? null); // on the new map while mapping
+  const lumi = pose && info ? toView(pose.x, pose.y) : null;
   const size = info ? footprintPx(info.resolution, scale) : 0; // Lumi's 510 mm base on screen, markers the same
   const target = picked !== null || point !== null; // a marker or a point is picked: the bar shows
   const navTop = 14 + inset.top + Math.max(44, 0.075 * h);
@@ -745,7 +938,7 @@ export default function MapScreen() {
   };
   // closed: a pill in the map's top left corner (the nav's look); open: a card in the same corner
   const routePanel =
-    !info || positioning || drawing ? null : menu !== 'route' ? (
+    !info || positioning || drawing || mapping ? null : menu !== 'route' ? (
       <Pressable
         onPress={toggleRoute}
         accessibilityRole="button"
@@ -959,18 +1152,27 @@ export default function MapScreen() {
         ))}
       </>
     );
-  } else if (menu === 'maps' && info) {
-    list = info.maps.map((m) => {
-      const on = m.name === info.name && m.floor === info.floor;
+  } else if (menu === 'maps' && mapInfo) {
+    const isOn = (m: { name: string; floor: number }) => m.name === mapInfo.name && m.floor === mapInfo.floor;
+    // the map in use first, set apart; then the others, the newest first (the API's order)
+    list = [...mapInfo.maps.filter(isOn), ...mapInfo.maps.filter((m) => !isOn(m))].map((m, i) => {
+      const on = isOn(m);
+      const going = switching === m.name;
       return (
-        <Pressable
-          key={`${m.name}/${m.floor}`}
-          onPress={() => !on && switchTo(m.name, m.floor)}
-          style={({ pressed }) => [styles.row, on && styles.rowOn, pressed && styles.pressed]}
-        >
-          <Text style={[styles.rowText, on && styles.rowTextOn]}>{m.name}</Text>
-          {on && <Text style={styles.rowGo}>●</Text>}
-        </Pressable>
+        <View key={`${m.name}/${m.floor}`}>
+          <Pressable
+            onPress={() => !on && !switching && switchTo(m.name, m.floor)}
+            disabled={on || !!switching}
+            style={({ pressed }) => [styles.row, on && styles.mapRowOn, pressed && styles.pressed]}
+          >
+            <Text style={[styles.rowText, on && styles.mapTextOn, going && styles.rowTextOn]} numberOfLines={1}>
+              {m.name}
+            </Text>
+            {on && <Text style={styles.mapInUse}>{t('mapInUse')}</Text>}
+            {going && <Text style={styles.mapInUse}>{t('mapSwitching')}</Text>}
+          </Pressable>
+          {on && i === 0 && mapInfo.maps.length > 1 && <View style={styles.sep} />}
+        </View>
       );
     });
   }
@@ -997,7 +1199,7 @@ export default function MapScreen() {
       >
         {info && scale > 0 && (
           <Image
-            source={{ uri: mapImageUrl(url, info, version) }}
+            source={{ uri: scanPic && mapping ? scanPic.uri : mapImageUrl(url, info, version) }}
             style={{
               position: 'absolute',
               left: offset.x,
@@ -1006,7 +1208,7 @@ export default function MapScreen() {
               height: info.height * scale,
             }}
             resizeMode="stretch"
-            onError={() => setFailed(true)}
+            onError={() => !mapping && setFailed(true)}
           />
         )}
         {info && scale > 0 && info.lines.length > 0 && (
@@ -1166,13 +1368,25 @@ export default function MapScreen() {
               position: 'absolute',
               left: lumi.x - size / 2,
               top: lumi.y - size / 2,
-              transform: [{ rotate: `${-heading}rad` }],
+              transform: [{ rotate: `${-(pose?.theta ?? 0)}rad` }],
             }}
           >
             <Footprint size={size} stroke={mono.green} fill="rgba(61,255,139,0.28)" />
           </View>
         )}
-        {!info && <Text style={styles.center}>{t(failed ? 'mapNoMap' : 'mapLoading')}</Text>}
+        {nextPic && (
+          // the next picture loads out of sight and then takes the place of the shown one (no blank frame between)
+          <Image
+            source={{ uri: nextPic.uri }}
+            style={styles.preload}
+            onLoad={() => {
+              setScanPic((shown) => keepPicture(shown, nextPic));
+              setNextPic(null);
+            }}
+            onError={() => setNextPic(null)}
+          />
+        )}
+        {!info && <Text style={styles.center}>{t(mapping ? 'mapScanWaiting' : failed ? 'mapNoMap' : 'mapLoading')}</Text>}
       </View>
 
       {info && (
@@ -1230,8 +1444,12 @@ export default function MapScreen() {
           }}
         >
           {ITEMS.map((item) => {
-            const on = (item.key === 'control' && control) || (item.key === 'position' && positioning) || menu === item.key;
-            const color = item.soon ? mono.dim : on ? mono.text : mono.soft;
+            const on =
+              (item.key === 'control' && control) ||
+              (item.key === 'position' && positioning) ||
+              (item.key === 'mapping' && mapping) ||
+              menu === item.key;
+            const color = item.soon || offWhileMapping(item.key) ? mono.dim : on ? mono.text : mono.soft;
             return (
               <Pressable
                 key={item.key}
@@ -1242,7 +1460,7 @@ export default function MapScreen() {
                 }}
                 hitSlop={4}
                 accessibilityRole="button"
-                accessibilityState={{ selected: on, disabled: item.soon }}
+                accessibilityState={{ selected: on, disabled: item.soon || offWhileMapping(item.key) }}
                 style={({ pressed }) => [styles.item, on && styles.itemOn, pressed && styles.pressed]}
               >
                 <Icon item={item.key} color={color} />
@@ -1271,7 +1489,34 @@ export default function MapScreen() {
         </ScrollView>
       )}
 
-      {run && !positioning && (
+      {scanning && (
+        <View style={[styles.bar, { bottom: 18 + inset.bottom + DOCK_SPACE + 14 }]}>
+          <View style={styles.barLabel}>
+            <View style={[styles.barDot, styles.barDotScan]} />
+            <Text style={styles.barTarget} numberOfLines={1}>
+              {scanning.name}
+            </Text>
+          </View>
+          {scanning.progress !== null && (
+            <Text style={[styles.barProgress, scanning.progress >= 1 && styles.barProgressDone]}>
+              {t('mapScanOptimized')} {progressText(scanning.progress)}
+            </Text>
+          )}
+          {scanBusy ? (
+            <Text style={[styles.btnText, styles.barBusy]}>{t('mapScanSaving')}</Text>
+          ) : (
+            <>
+              <Pressable onPress={cancelMapping} style={({ pressed }) => [styles.btn, styles.btnQuiet, pressed && styles.pressed]}>
+                <Text style={styles.btnText}>{t('cancel')}</Text>
+              </Pressable>
+              <Pressable onPress={saveMapping} style={({ pressed }) => [styles.btn, styles.btnGo, pressed && styles.pressed]}>
+                <Text style={[styles.btnText, styles.btnGoText]}>{t('mapSave')}</Text>
+              </Pressable>
+            </>
+          )}
+        </View>
+      )}
+      {run && !positioning && !mapping && (
         <View style={[styles.bar, { bottom: 18 + inset.bottom + DOCK_SPACE + 14 }]}>
           <Text style={styles.barTarget}>
             {t('mapRoute')}
@@ -1311,7 +1556,7 @@ export default function MapScreen() {
           </Pressable>
         </View>
       )}
-      {!run && !drawing && (target || positioning) && (
+      {!run && !drawing && !mapping && (target || positioning) && (
         <View style={[styles.bar, { bottom: 18 + inset.bottom + DOCK_SPACE + 14 }]}>
           {picked && !positioning && (
             <View style={styles.barLabel}>
@@ -1408,6 +1653,20 @@ export default function MapScreen() {
         initial={nextMarkerName(info?.lines.map((l) => l.name) ?? [], 'line')}
         valid={(n) => validMarkerName(n) && !info?.lines.some((l) => l.name === n)}
         onDone={saveDrawn}
+        onClose={() => setNaming(null)}
+      />
+      <NameDialog
+        open={naming === 'map'}
+        title="mapScanName"
+        rule="mapScanRule"
+        initial={nextMarkerName(mapInfo?.maps.map((m) => m.name) ?? [], 'map_')}
+        valid={(n) =>
+          validNewMapName(
+            n,
+            (mapInfo?.maps ?? []).map((m) => m.name),
+          )
+        }
+        onDone={startMapping}
         onClose={() => setNaming(null)}
       />
       <MarkerDialog
@@ -1563,8 +1822,10 @@ const styles = StyleSheet.create({
   rowOn: { backgroundColor: 'rgba(255,255,255,0.07)' },
   rowText: { fontFamily: fonts.mono, fontSize: 12, color: '#cfcfcf' },
   rowTextOn: { color: mono.red, fontFamily: fonts.monoBold },
-  rowGo: { fontFamily: fonts.monoBold, fontSize: 11, color: mono.green },
   rowAdd: { color: mono.green, fontFamily: fonts.monoBold },
+  mapRowOn: { backgroundColor: 'rgba(61,255,139,0.10)', borderWidth: 1, borderColor: 'rgba(61,255,139,0.45)' },
+  mapTextOn: { color: mono.green, fontFamily: fonts.monoBold },
+  mapInUse: { fontFamily: fonts.monoBold, fontSize: 9, letterSpacing: 1.2, color: mono.green, textTransform: 'uppercase' },
   rowAddLine: { color: mono.red, fontFamily: fonts.monoBold },
   stepper: { flexDirection: 'row', alignItems: 'center', gap: 6 },
   stepBtn: {
@@ -1784,6 +2045,12 @@ const styles = StyleSheet.create({
   barLabel: { flexDirection: 'row', alignItems: 'center', gap: 7, paddingLeft: 8, paddingRight: 4, maxWidth: 180 },
   barDot: { width: 8, height: 8, borderRadius: 4 },
   barDotMarker: { backgroundColor: mono.red },
+  barDotScan: { backgroundColor: mono.green },
+  // the optimizing progress beside the new map's name, green once it is done (then SAVE is best)
+  barProgress: { fontFamily: fonts.mono, fontSize: 11, color: mono.soft, paddingRight: 4 },
+  barProgressDone: { color: mono.green },
+  barBusy: { color: mono.soft, paddingHorizontal: 14 },
+  preload: { position: 'absolute', width: 1, height: 1, opacity: 0 },
   // SAVE MARKER and GO HERE: the same button, an icon and a word
   barBtn: {
     flexDirection: 'row',

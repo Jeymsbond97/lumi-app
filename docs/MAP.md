@@ -6,8 +6,8 @@ while Map is open (Tabs in `src/app/(robot)/_layout.tsx`), so going back does no
 
 ## Layout
 
-- **Navbar** at the top: CONTROL, MARKERS ▾, ROUTE, POSITION ▾, MAPPING, MAPS ▾, SETTINGS. ROUTE, MAPPING and
-  SETTINGS say "Coming soon" for now.
+- **Navbar** at the top: CONTROL, MARKERS ▾, LINES ▾, POSITION, MAPPING, MAPS ▾, SETTINGS. SETTINGS says
+  "Coming soon" for now.
 - **The frame**: the map sits in a rounded frame between the navbar and the Dock, whatever its size. It starts fitted
   to the frame. **+ / −** (bottom right, outside the frame so a moving finger can't cancel the press) zoom 1.5× about
   the centre, from the whole map up to 8×. Two fingers pinch, one finger drags; a touch that moves less than 8 px is a
@@ -28,6 +28,7 @@ while Map is open (Tabs in `src/app/(robot)/_layout.tsx`), so going back does no
 | Drive a route | the ROUTE pill in the map's top left corner opens a card there (a tap on its title closes it): + Add stop ▾ or tap markers on the map, in order; Wait (s, 0 = no wait), Loop there and back, Times (0 = until stopped; needs Greeter or Patrol on), START; the bar shows 2/4 and the stop; CANCEL | `/agv/route` (one marker: `/agv/go`), `GET /agv/route`, `/agv/cancel` |
 | Switch maps | MAPS ▾ → a map, confirm; reloads after 15 s; correct the position after | `/map/switch` |
 | Drive by hand | CONTROL shows the joystick | `/jog` |
+| Make a new map | MAPPING: a name, confirm, then drive with the joystick while the map grows; SAVE or CANCEL (see below) | `/map/scan/*` |
 | No-go lines | always drawn in red. LINES ▾ → + New line: each tap on the map is a point (UNDO, CLEAR, CANCEL), SAVE (2 points or more) asks a name; a line's name lights it up; ✎ renames (saved anew, old deleted) or deletes | `/map/info` `lines`, `/map/line`, `/map/line/delete` (base `/forbidden_manager/action_service` list_lines, add_lines, delete_lines over rosbridge) |
 
 ## Position correction (POSITION)
@@ -41,13 +42,37 @@ Like the base's own page (Thor `docs/05_AGV_BASE.md` §2.4):
 3. **SAVE**, confirm (or CANCEL). Within about 20 cm and 5° is enough; the base refines the rest. Only while the base is
    free (idle or stopped).
 
+## A new map (MAPPING)
+
+Like the base's own map builder (Thor `docs/05_AGV_BASE.md` §2.2 and §7):
+
+1. **MAPPING** asks a name: letters, digits and `_`, at most 36, not a name in MAPS (`map_1` is offered). Confirm:
+   the base leaves the current map until another one is switched to in MAPS.
+2. The base scans (a small map, 2 cm a pixel). The frame shows the new map as it grows (`/map/scan/picture`, every
+   1.5 s) with Lumi on it (`/map/scan/state`, every second, pose from the base's `/robot_pose`); the joystick is on.
+   Drive slowly, about 0.5 m from the walls, and turn around in each corner. Markers, lines, the route and the other
+   nav items are off meanwhile (they need the base's map); taps on the map do nothing.
+3. The bar shows the name, **Optimized 63%** when the base says (green at 100%), CANCEL and SAVE.
+   - **SAVE** asks first ("Optimizing is not done yet. Save anyway?" below 100%), then waits for the base (up to 3
+     min). The new map is then in MAPS; switch to it there and set the position.
+   - **CANCEL** asks, then the base saves the scan and lumi-wave deletes it (the base has no cancel); if the base
+     keeps it, the note says the map stays in MAPS.
+4. A scan that is already running when the screen opens (the app was closed, or the base's page started it) is shown
+   the same way; one that ends on the robot closes the view ("Mapping ended on the robot").
+
+While a scan runs, lumi-wave refuses `/map/switch` and `/map/position` (409). Starting is refused while the assistant
+or a task runs.
+
 ## Code
 
 - `src/lib/mapGeom.ts`: map info, map ↔ picture coordinates, fit, zoom and pan, drag heading, true size, lidar
   points on the map (tests in `src/lib/__tests__/mapGeom.test.ts`).
 - `src/lib/api.ts`: `getMapInfo`, `mapImageUrl`, `goMarker`, `goPoint`, `saveMarker`, `deleteMarker`, `setPosition`,
-  `setPositionAtMarker`, `getScan`, `switchMap`.
-- `src/ui/NameDialog.tsx`: the marker name dialog.
+  `setPositionAtMarker`, `getScan`, `switchMap`, `getScanState`, `getScanPicture`, `startScan`, `saveScan`,
+  `cancelScan`.
+- `src/lib/mapping.ts`: the new map's state and picture, the name rule, progress (tests in
+  `src/lib/__tests__/mapping.test.ts`).
+- `src/ui/NameDialog.tsx`: the name dialog (markers, lines, a new map).
 
 ## In a browser
 
