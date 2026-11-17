@@ -52,7 +52,8 @@
     "typecheck": "tsc --noEmit",
     "lint": "expo lint",
     "test": "jest",
-    "usb": "node scripts/usb-bridge.mjs"
+    "usb": "node scripts/usb-bridge.mjs",
+    "webproxy": "node scripts/web-proxy.mjs"
   },
   "private": true,
   "jest": {
