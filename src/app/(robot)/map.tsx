@@ -20,6 +20,7 @@ import Svg, { Circle, Path, Rect } from 'react-native-svg';
 import {
   BusyError,
   cancelDrive,
+  deleteLine,
   deleteMarker,
   getMapInfo,
   getRoute,
@@ -27,6 +28,7 @@ import {
   goMarker,
   goPoint,
   mapImageUrl,
+  saveLine,
   saveMarker,
   setPosition,
   startRoute,
@@ -66,13 +68,15 @@ const NUDGE_M = 0.05; // one press of an arrow while setting the position
 const TURN_RAD = (2 * Math.PI) / 180; // one press of a turn
 const REPEAT_AFTER_MS = 400; // an arrow held this long starts repeating
 const REPEAT_MS = 90; // then one step this often
+const GRAB_PX = 22; // a finger this close to a drawn point moves it
 const ROUTE_EVERY_MS = 1000; // a route's progress while the API drives it
 
-type Item = 'control' | 'markers' | 'route' | 'position' | 'mapping' | 'maps' | 'settings';
-type Menu = 'markers' | 'maps' | 'route';
+type Item = 'control' | 'markers' | 'lines' | 'route' | 'position' | 'mapping' | 'maps' | 'settings';
+type Menu = 'markers' | 'lines' | 'maps' | 'route';
 const ITEMS: { key: Item; label: TextKey; list?: boolean; soon?: boolean }[] = [
   { key: 'control', label: 'mapControl' },
   { key: 'markers', label: 'mapMarkers', list: true },
+  { key: 'lines', label: 'mapLines', list: true },
   { key: 'position', label: 'mapPosition' },
   { key: 'mapping', label: 'mapMapping', soon: true },
   { key: 'maps', label: 'mapMaps', list: true },
@@ -102,6 +106,12 @@ function Icon({ item, color }: { item: Item; color: string }) {
           <Circle cx={12} cy={12} r={5} {...p} />
         </>
       )}
+      {item === 'lines' && (
+        <>
+          <Circle cx={12} cy={12} r={9} {...p} />
+          <Path d="M5.6 18.4L18.4 5.6" {...p} />
+        </>
+      )}
       {item === 'mapping' && <Path d="M3 6l6-3 6 3 6-3v15l-6 3-6-3-6 3zM9 3v15M15 6v15" {...p} />}
       {item === 'maps' && (
         <>
@@ -119,6 +129,9 @@ function Icon({ item, color }: { item: Item; color: string }) {
   );
 }
 
+/** A marker's dot in Footprint's 100 x 100 box: about 9 px across, at most 60 % of the box. */
+const markerDotR = (size: number) => Math.min(30, Math.max(12, (4.5 * 100) / size));
+
 /** Lumi's base at its true size on the map (a rounded square) with an arrow to its front (+x of the pose). */
 function Footprint({ size, stroke, fill, outline = true }: { size: number; stroke: string; fill: string; outline?: boolean }) {
   return (
@@ -126,7 +139,7 @@ function Footprint({ size, stroke, fill, outline = true }: { size: number; strok
       {outline ? (
         <Rect x={4} y={4} width={92} height={92} rx={20} stroke={stroke} strokeWidth={size < 16 ? 12 : 6} fill={fill} />
       ) : (
-        <Circle cx={50} cy={50} r={Math.min(30, Math.max(12, (4.5 * 100) / size))} fill={stroke} />
+        <Circle cx={50} cy={50} r={markerDotR(size)} fill={stroke} />
       )}
       <Path
         d="M50 50 L86 50 M70 34 L86 50 L70 66"
@@ -190,6 +203,19 @@ function Cross({ color = mono.soft, size = 12 }: { color?: string; size?: number
   return (
     <Svg width={size} height={size} viewBox="0 0 24 24">
       <Path d="M6 6l12 12M18 6L6 18" stroke={color} strokeWidth={2.4} fill="none" strokeLinecap="round" />
+    </Svg>
+  );
+}
+
+const PIN_W = 26;
+const PIN_H = 34;
+/** The tapped point: a yellow pin whose tip is the point, with a ring on the ground. */
+function PointPin() {
+  return (
+    <Svg width={PIN_W} height={PIN_H + 5} viewBox="0 0 26 39">
+      <Circle cx={13} cy={34} r={4.5} fill="none" stroke={mono.yellow} strokeOpacity={0.5} strokeWidth={1.5} />
+      <Path d="M13 34C13 34 3 21.5 3 13a10 10 0 0 1 20 0c0 8.5-10 21-10 21z" fill={mono.yellow} stroke="#1a1400" strokeWidth={1.5} />
+      <Circle cx={13} cy={13} r={4} fill="#1a1400" />
     </Svg>
   );
 }
@@ -270,7 +296,10 @@ export default function MapScreen() {
   const [aim, setAim] = useState<number | null>(null); // the heading dragged out while setting the position, rad
   const [scan, setScan] = useState<number[][] | null>(null); // the lidar now, around the base
   const [ask, setAsk] = useState<ConfirmRequest | null>(null);
-  const [naming, setNaming] = useState(false);
+  const [naming, setNaming] = useState<'marker' | 'line' | null>(null); // the name dialog, for what
+  const [drawing, setDrawing] = useState<{ x: number; y: number }[] | null>(null); // a new no-go line's points
+  const [litLine, setLitLine] = useState<string | null>(null); // the line picked in LINES, drawn brighter
+  const [editLine, setEditLine] = useState<string | null>(null); // the line in the edit dialog
   const [editing, setEditing] = useState<MapMarker | null>(null); // the marker in the edit dialog
   const [note, setNote] = useState<{ key: TextKey; bad?: boolean } | null>(null);
 
@@ -388,7 +417,16 @@ export default function MapScreen() {
     d: number;
     moved: boolean;
     aimed?: boolean;
+    /** drawing a line: the point this finger moves; `created`: put down by this touch (`first`: the line's start) */
+    draw?: { index: number; created: boolean; first: boolean };
   } | null>(null);
+  /** A place on the screen (frame coordinates) in the map frame; null outside the picture. */
+  const viewToWorld = (vx: number, vy: number) => {
+    if (!info || scale === 0) return null;
+    const px = (vx - offset.x) / scale;
+    const py = (vy - offset.y) / scale;
+    return px < 0 || py < 0 || px > info.width || py > info.height ? null : pixelToWorld(info, px, py);
+  };
   const down = useRef({ x: 0, y: 0 }); // where the last touch went down (a marker's tap is not taken by the frame)
   const spread = (e: GestureResponderEvent) => {
     const t = e.nativeEvent.touches;
@@ -409,11 +447,35 @@ export default function MapScreen() {
       d: 0,
       moved: false,
     };
+    // drawing a line: a finger on a point moves it; elsewhere it puts a new point down and drags it (the line follows)
+    if (drawing) {
+      const vx = n.pageX - frame.x;
+      const vy = n.pageY - frame.y;
+      const near = drawing.findIndex((q) => {
+        const v = toView(q.x, q.y);
+        return Math.hypot(v.x - vx, v.y - vy) < GRAB_PX;
+      });
+      if (near >= 0) touch.current.draw = { index: near, created: false, first: false };
+      else {
+        const w = viewToWorld(vx, vy);
+        if (!w) return;
+        Haptics.selectionAsync().catch(() => {});
+        const first = drawing.length === 0;
+        touch.current.draw = { index: first ? 1 : drawing.length, created: true, first };
+        setDrawing(first ? [w, w] : [...drawing, w]); // the first stroke: its start stays, its end follows the finger
+      }
+    }
   };
   const onMove = (e: GestureResponderEvent) => {
     const t = touch.current;
     if (!t) return;
     const two = spread(e);
+    if (two && t.draw) {
+      // a second finger: it was a pinch, not a point
+      const { created, first } = t.draw;
+      if (created) setDrawing((d) => (d ? (first ? [] : d.slice(0, -1)) : d));
+      t.draw = undefined;
+    }
     if (two) {
       if (!t.d)
         Object.assign(t, {
@@ -438,6 +500,13 @@ export default function MapScreen() {
     if (!t.moved && Math.hypot(dx, dy) < TAP_PX) return;
     t.moved = true;
     if (t.d) return;
+    if (t.draw) {
+      const w = viewToWorld(n.pageX - frame.x, n.pageY - frame.y);
+      const i = t.draw.index;
+      if (w) setDrawing((d) => d && d.map((q, k) => (k === i ? w : q)));
+      return;
+    }
+    if (drawing) return; // drawing: one finger draws, two move the map
     if (positioning) {
       if (!t.aimed) tap(t.x - frame.x, t.y - frame.y); // the place is where the finger went down
       t.aimed = true;
@@ -449,6 +518,11 @@ export default function MapScreen() {
   const onRelease = (e: GestureResponderEvent) => {
     const t = touch.current;
     touch.current = null;
+    if (t?.draw) {
+      if (t.draw.first && !t.moved) setDrawing((d) => d && d.slice(0, 1)); // a tap: the start alone
+      return;
+    }
+    if (drawing) return;
     if (t && !t.moved) tap(e.nativeEvent.pageX - frame.x, e.nativeEvent.pageY - frame.y);
   };
 
@@ -474,7 +548,7 @@ export default function MapScreen() {
     call?.then(done('mapGoing'), failedNote);
   };
   const save = (name: string) => {
-    setNaming(false);
+    setNaming(null);
     saveMarker(url, name, point ? { ...point, theta: heading } : undefined).then(() => {
       setNote({ key: 'mapSaved' });
       setPoint(null);
@@ -588,8 +662,58 @@ export default function MapScreen() {
       setControl((c) => !c);
     }
   };
+  const startDrawing = () => {
+    Haptics.selectionAsync().catch(() => {});
+    setMenu(null);
+    setPositioning(false);
+    setPicked(null);
+    setPoint(null);
+    setLitLine(null);
+    setDrawing([]);
+    setNote({ key: 'mapLineHint' });
+  };
+  const saveDrawn = (name: string) => {
+    setNaming(null);
+    if (!drawing || drawing.length < 2) return;
+    saveLine(url, name, drawing).then(() => {
+      setNote({ key: 'mapLineSaved' });
+      setDrawing(null);
+      load();
+    }, failedNote);
+  };
+  const renameLine = (old: string, name: string) => {
+    setEditLine(null);
+    const line = info?.lines.find((l) => l.name === old);
+    if (!line) return;
+    // as the base's own page: saved under the new name, then the old one deleted
+    saveLine(url, name, line.points)
+      .then(() => deleteLine(url, old))
+      .then(() => {
+        setNote({ key: 'mapLineRenamed' });
+        if (litLine === old) setLitLine(name);
+        load();
+      }, failedNote);
+  };
+  const removeLine = (name: string) =>
+    setAsk({
+      title: `${t('mapDeleteLineAsk')} ${name}`,
+      choices: [
+        {
+          text: t('delete'),
+          destructive: true,
+          onPress: () =>
+            deleteLine(url, name).then(() => {
+              setNote({ key: 'mapLineDeleted' });
+              if (litLine === name) setLitLine(null);
+              load();
+            }, failedNote),
+        },
+      ],
+    });
+
   const startPositioning = (on: boolean) => {
     setMenu(null);
+    setDrawing(null);
     setPositioning(on);
     setPicked(null);
     if (on) setControl(false); // the arrows sit where the joystick would
@@ -610,7 +734,7 @@ export default function MapScreen() {
 
   const lumi = status?.pose && info ? toView(status.pose.x, status.pose.y) : null;
   const size = info ? footprintPx(info.resolution, scale) : 0; // Lumi's 510 mm base on screen, markers the same
-  const target = picked ?? (point ? t('mapPoint') : null);
+  const target = picked !== null || point !== null; // a marker or a point is picked: the bar shows
   const navTop = 14 + inset.top + Math.max(44, 0.075 * h);
 
   // the route's panel: the map's top left corner, open while ROUTE is
@@ -621,7 +745,7 @@ export default function MapScreen() {
   };
   // closed: a pill in the map's top left corner (the nav's look); open: a card in the same corner
   const routePanel =
-    !info || positioning ? null : menu !== 'route' ? (
+    !info || positioning || drawing ? null : menu !== 'route' ? (
       <Pressable
         onPress={toggleRoute}
         accessibilityRole="button"
@@ -768,7 +892,7 @@ export default function MapScreen() {
           onPress={() => {
             setMenu(null);
             setPoint(null);
-            setNaming(true);
+            setNaming('marker');
           }}
           style={({ pressed }) => [styles.row, pressed && styles.pressed]}
         >
@@ -797,6 +921,36 @@ export default function MapScreen() {
               hitSlop={8}
               accessibilityRole="button"
               accessibilityLabel={`${t('mapEditMarker')} ${m.name}`}
+              style={({ pressed }) => pressed && styles.pressed}
+            >
+              <Pencil />
+            </Pressable>
+          </Pressable>
+        ))}
+      </>
+    );
+  } else if (menu === 'lines' && info) {
+    list = (
+      <>
+        <Pressable onPress={startDrawing} style={({ pressed }) => [styles.row, pressed && styles.pressed]}>
+          <Text style={[styles.rowText, styles.rowAddLine]}>+ {t('mapNewLine')}</Text>
+        </Pressable>
+        {info.lines.length > 0 && <View style={styles.sep} />}
+        {info.lines.map((l) => (
+          <Pressable
+            key={l.name}
+            onPress={() => setLitLine((n) => (n === l.name ? null : l.name))}
+            style={({ pressed }) => [styles.row, litLine === l.name && styles.rowOn, pressed && styles.pressed]}
+          >
+            <Text style={[styles.rowText, litLine === l.name && styles.rowTextOn]}>{l.name}</Text>
+            <Pressable
+              onPress={() => {
+                setMenu(null);
+                setEditLine(l.name);
+              }}
+              hitSlop={8}
+              accessibilityRole="button"
+              accessibilityLabel={`${t('mapEditLine')} ${l.name}`}
               style={({ pressed }) => pressed && styles.pressed}
             >
               <Pencil />
@@ -862,8 +1016,8 @@ export default function MapScreen() {
                 key={l.name}
                 d={l.points.map((q, i) => `${i ? 'L' : 'M'}${toView(q.x, q.y).x} ${toView(q.x, q.y).y}`).join(' ')}
                 stroke={mono.red}
-                strokeOpacity={0.85}
-                strokeWidth={2}
+                strokeOpacity={litLine && litLine !== l.name ? 0.45 : 0.9}
+                strokeWidth={litLine === l.name ? 4 : 2}
                 strokeLinecap="round"
                 strokeLinejoin="round"
                 fill="none"
@@ -876,7 +1030,7 @@ export default function MapScreen() {
           const on = picked === m.name;
           const stroke = on ? mono.red : m.dock ? mono.blue : '#8a8a8a';
           return (
-            <View key={m.name} style={StyleSheet.absoluteFill} pointerEvents="box-none">
+            <View key={m.name} style={StyleSheet.absoluteFill} pointerEvents={drawing ? 'none' : 'box-none'}>
               <Pressable
                 onPress={() => {
                   if (menu === 'route') {
@@ -899,7 +1053,7 @@ export default function MapScreen() {
               >
                 <Footprint size={size} stroke={stroke} fill="none" outline={false} />
               </Pressable>
-              <View pointerEvents="none" style={[styles.label, { left: p.x - 60, top: p.y - Math.max(size / 2, 6) - 17 }]}>
+              <View pointerEvents="none" style={[styles.label, { left: p.x - 60, top: p.y - (size * markerDotR(size)) / 100 - 16 }]}>
                 <Text style={[styles.markerText, on && styles.markerTextOn]}>{m.name}</Text>
               </View>
             </View>
@@ -922,14 +1076,10 @@ export default function MapScreen() {
         {point && !positioning && (
           <View
             pointerEvents="none"
-            style={[
-              styles.ghost,
-              {
-                left: toView(point.x, point.y).x,
-                top: toView(point.x, point.y).y,
-              },
-            ]}
-          />
+            style={[styles.pin, { left: toView(point.x, point.y).x - PIN_W / 2, top: toView(point.x, point.y).y - PIN_H }]}
+          >
+            <PointPin />
+          </View>
         )}
         {point && positioning && (
           <View
@@ -990,6 +1140,24 @@ export default function MapScreen() {
               );
             })}
           </View>
+        )}
+        {drawing && info && scale > 0 && (
+          <Svg width={frame.w} height={frame.h} style={StyleSheet.absoluteFill} pointerEvents="none">
+            {drawing.length > 1 && (
+              <Path
+                d={drawing.map((q, i) => `${i ? 'L' : 'M'}${toView(q.x, q.y).x} ${toView(q.x, q.y).y}`).join(' ')}
+                stroke={mono.red}
+                strokeWidth={3}
+                strokeDasharray="8 5"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                fill="none"
+              />
+            )}
+            {drawing.map((q, i) => (
+              <Circle key={i} cx={toView(q.x, q.y).x} cy={toView(q.x, q.y).y} r={7} fill={mono.red} stroke="#fff" strokeWidth={2} />
+            ))}
+          </Svg>
         )}
         {lumi && (
           <View
@@ -1114,9 +1282,45 @@ export default function MapScreen() {
           </Pressable>
         </View>
       )}
-      {!run && (target || positioning) && (
+      {drawing && (
         <View style={[styles.bar, { bottom: 18 + inset.bottom + DOCK_SPACE + 14 }]}>
-          {target && !positioning && <Text style={styles.barTarget}>{target}</Text>}
+          <Text style={styles.barTarget}>{t('mapNewLine')}</Text>
+          <Pressable
+            onPress={() => setDrawing(drawing.slice(0, -1))}
+            disabled={!drawing.length}
+            style={({ pressed }) => [styles.btn, styles.btnQuiet, !drawing.length && styles.btnOff, pressed && styles.pressed]}
+          >
+            <Text style={styles.btnText}>{t('mapUndo')}</Text>
+          </Pressable>
+          <Pressable
+            onPress={() => setDrawing([])}
+            disabled={!drawing.length}
+            style={({ pressed }) => [styles.btn, styles.btnQuiet, !drawing.length && styles.btnOff, pressed && styles.pressed]}
+          >
+            <Text style={styles.btnText}>{t('mapRouteClear')}</Text>
+          </Pressable>
+          <Pressable onPress={() => setDrawing(null)} style={({ pressed }) => [styles.btn, styles.btnQuiet, pressed && styles.pressed]}>
+            <Text style={styles.btnText}>{t('cancel')}</Text>
+          </Pressable>
+          <Pressable
+            onPress={() => setNaming('line')}
+            disabled={drawing.length < 2}
+            style={({ pressed }) => [styles.btn, styles.btnGo, drawing.length < 2 && styles.btnOff, pressed && styles.pressed]}
+          >
+            <Text style={[styles.btnText, styles.btnGoText]}>{t('mapSave')}</Text>
+          </Pressable>
+        </View>
+      )}
+      {!run && !drawing && (target || positioning) && (
+        <View style={[styles.bar, { bottom: 18 + inset.bottom + DOCK_SPACE + 14 }]}>
+          {picked && !positioning && (
+            <View style={styles.barLabel}>
+              <View style={[styles.barDot, styles.barDotMarker]} />
+              <Text style={styles.barTarget} numberOfLines={1}>
+                {picked}
+              </Text>
+            </View>
+          )}
           {positioning ? (
             <>
               <Pressable
@@ -1136,12 +1340,38 @@ export default function MapScreen() {
           ) : (
             <>
               {point && (
-                <Pressable onPress={() => setNaming(true)} style={({ pressed }) => [styles.btn, pressed && styles.pressed]}>
-                  <Text style={styles.btnText}>{t('mapSave')}</Text>
+                <Pressable onPress={() => setNaming('marker')} style={({ pressed }) => [styles.barBtn, pressed && styles.pressed]}>
+                  <Svg width={13} height={13} viewBox="0 0 24 24">
+                    <Path d="M12 21s-6-5.5-6-11a6 6 0 0 1 12 0c0 5.5-6 11-6 11z" stroke={mono.text} strokeWidth={2} fill="none" />
+                    <Path d="M12 7v6M9 10h6" stroke={mono.text} strokeWidth={2} strokeLinecap="round" />
+                  </Svg>
+                  <Text style={styles.btnText}>{t('mapSaveMarker')}</Text>
                 </Pressable>
               )}
-              <Pressable onPress={go} style={({ pressed }) => [styles.btn, styles.btnGo, pressed && styles.pressed]}>
-                <Text style={[styles.btnText, styles.btnGoText]}>{t('mapGo')}</Text>
+              <Pressable onPress={go} style={({ pressed }) => [styles.barBtn, pressed && styles.pressed]}>
+                <Svg width={13} height={13} viewBox="0 0 24 24">
+                  <Path
+                    d="M5 12h13M13 6l6 6-6 6"
+                    stroke={mono.text}
+                    strokeWidth={2.4}
+                    fill="none"
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                  />
+                </Svg>
+                <Text style={styles.btnText}>{t('mapGoHere')}</Text>
+              </Pressable>
+              <Pressable
+                onPress={() => {
+                  setPicked(null);
+                  setPoint(null);
+                }}
+                hitSlop={6}
+                accessibilityRole="button"
+                accessibilityLabel={t('cancel')}
+                style={({ pressed }) => [styles.barClose, pressed && styles.pressed]}
+              >
+                <Cross color={mono.soft} size={11} />
               </Pressable>
             </>
           )}
@@ -1163,13 +1393,34 @@ export default function MapScreen() {
       />
       <ConfirmDialog request={ask} onClose={() => setAsk(null)} />
       <NameDialog
-        open={naming}
+        open={naming === 'marker'}
         title="mapMarkerName"
         rule="mapNameRule"
         initial={nextMarkerName(info?.markers.map((m) => m.name) ?? [])}
         valid={validMarkerName}
         onDone={save}
-        onClose={() => setNaming(false)}
+        onClose={() => setNaming(null)}
+      />
+      <NameDialog
+        open={naming === 'line'}
+        title="mapLineName"
+        rule="mapNameRule"
+        initial={nextMarkerName(info?.lines.map((l) => l.name) ?? [], 'line')}
+        valid={(n) => validMarkerName(n) && !info?.lines.some((l) => l.name === n)}
+        onDone={saveDrawn}
+        onClose={() => setNaming(null)}
+      />
+      <MarkerDialog
+        marker={editLine ? { name: editLine } : null}
+        title="mapEditLine"
+        names={info?.lines.map((l) => l.name) ?? []}
+        onRename={(name) => editLine && renameLine(editLine, name)}
+        onDelete={() => {
+          if (!editLine) return;
+          setEditLine(null);
+          removeLine(editLine);
+        }}
+        onClose={() => setEditLine(null)}
       />
     </View>
   );
@@ -1262,17 +1513,7 @@ const styles = StyleSheet.create({
     textShadowRadius: 4,
   },
   markerTextOn: { color: '#fff', backgroundColor: 'rgba(255,45,45,0.85)' },
-  ghost: {
-    position: 'absolute',
-    width: 16,
-    height: 16,
-    marginLeft: -8,
-    marginTop: -8,
-    borderRadius: 8,
-    borderWidth: 2,
-    borderStyle: 'dashed',
-    borderColor: mono.yellow,
-  },
+  pin: { position: 'absolute', width: PIN_W, height: PIN_H + 5 },
   navWrap: {
     position: 'absolute',
     left: 0,
@@ -1324,6 +1565,7 @@ const styles = StyleSheet.create({
   rowTextOn: { color: mono.red, fontFamily: fonts.monoBold },
   rowGo: { fontFamily: fonts.monoBold, fontSize: 11, color: mono.green },
   rowAdd: { color: mono.green, fontFamily: fonts.monoBold },
+  rowAddLine: { color: mono.red, fontFamily: fonts.monoBold },
   stepper: { flexDirection: 'row', alignItems: 'center', gap: 6 },
   stepBtn: {
     width: 30,
@@ -1539,6 +1781,31 @@ const styles = StyleSheet.create({
     textTransform: 'uppercase',
   },
   btnGoText: { color: mono.green },
+  barLabel: { flexDirection: 'row', alignItems: 'center', gap: 7, paddingLeft: 8, paddingRight: 4, maxWidth: 180 },
+  barDot: { width: 8, height: 8, borderRadius: 4 },
+  barDotMarker: { backgroundColor: mono.red },
+  // SAVE MARKER and GO HERE: the same button, an icon and a word
+  barBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 7,
+    paddingHorizontal: 15,
+    paddingVertical: 9,
+    borderRadius: 999,
+    borderWidth: 1.5,
+    borderColor: mono.text,
+    backgroundColor: 'rgba(255,255,255,0.06)',
+  },
+  barClose: {
+    width: 30,
+    height: 30,
+    borderRadius: 15,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 1,
+    borderColor: '#444',
+    marginLeft: 2,
+  },
   btnStop: { borderColor: mono.red },
   btnStopText: { color: mono.red },
   pressed: { opacity: 0.6 },

@@ -271,6 +271,10 @@ export const goPoint = (baseUrl: string, x: number, y: number, theta: number) =>
 export const saveMarker = (baseUrl: string, name: string, at?: { x: number; y: number; theta: number }, charger = false) =>
   post(baseUrl, '/map/marker', { name, ...at, charger });
 export const deleteMarker = (baseUrl: string, name: string) => post(baseUrl, '/map/marker/delete', { name });
+/** A no-go line on this floor (the base never drives across it); an existing name is replaced. */
+export const saveLine = (baseUrl: string, name: string, points: { x: number; y: number }[]) =>
+  post(baseUrl, '/map/line', { name, points: points.map((q) => [q.x, q.y]) });
+export const deleteLine = (baseUrl: string, name: string) => post(baseUrl, '/map/line/delete', { name });
 /** Drive through markers in order; `loop`: there and back `rounds` times (0 = until stopped), needs the assistant.
  * Refused (BusyError) when loop is asked without Greeter or Patrol on. Says who drives it: the API or the assistant. */
 export async function startRoute(

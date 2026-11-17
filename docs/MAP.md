@@ -28,7 +28,7 @@ while Map is open (Tabs in `src/app/(robot)/_layout.tsx`), so going back does no
 | Drive a route | the ROUTE pill in the map's top left corner opens a card there (a tap on its title closes it): + Add stop ▾ or tap markers on the map, in order; Wait (s, 0 = no wait), Loop there and back, Times (0 = until stopped; needs Greeter or Patrol on), START; the bar shows 2/4 and the stop; CANCEL | `/agv/route` (one marker: `/agv/go`), `GET /agv/route`, `/agv/cancel` |
 | Switch maps | MAPS ▾ → a map, confirm; reloads after 15 s; correct the position after | `/map/switch` |
 | Drive by hand | CONTROL shows the joystick | `/jog` |
-| See no-go lines | always drawn in red; they are drawn and edited in the base's web page (:9001) | `/map/info` `lines` (base `/forbidden_manager/action_service` list_lines over rosbridge) |
+| No-go lines | always drawn in red. LINES ▾ → + New line: each tap on the map is a point (UNDO, CLEAR, CANCEL), SAVE (2 points or more) asks a name; a line's name lights it up; ✎ renames (saved anew, old deleted) or deletes | `/map/info` `lines`, `/map/line`, `/map/line/delete` (base `/forbidden_manager/action_service` list_lines, add_lines, delete_lines over rosbridge) |
 
 ## Position correction (POSITION)
 

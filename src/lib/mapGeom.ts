@@ -86,11 +86,11 @@ export function fitMap(picW: number, picH: number, viewW: number, viewH: number)
 export const validMarkerName = (name: string): boolean => /^[A-Za-z0-9_-]{1,50}$/.test(name);
 
 /** The next free name of the p1, p2, ... kind. */
-export function nextMarkerName(taken: string[]): string {
+export function nextMarkerName(taken: string[], prefix = 'p'): string {
   const used = new Set(taken);
   let n = 1;
-  while (used.has(`p${n}`)) n += 1;
-  return `p${n}`;
+  while (used.has(`${prefix}${n}`)) n += 1;
+  return `${prefix}${n}`;
 }
 
 // ---------- zoom and pan of the map view (the + / - buttons, two fingers, one finger) ----------

@@ -1,18 +1,22 @@
 // Edits one marker of the map, as the base's own page does: a new name, moved to where Lumi stands, or deleted.
+// The same card edits a no-go line (a new name or deleted).
 // A charger's marker (the base docks with it) keeps being one when renamed or moved. Same look as NameDialog, under STOP.
 import { useEffect, useState } from 'react';
 import { BackHandler, Pressable, StyleSheet, Text, TextInput, useWindowDimensions, View } from 'react-native';
 import Animated, { FadeIn, FadeOut, ZoomIn } from 'react-native-reanimated';
-import { useI18n } from '../lib/i18n';
+import { useI18n, type TextKey } from '../lib/i18n';
 import { validMarkerName, type MapMarker } from '../lib/mapGeom';
 import { clamp, fonts, mono } from './theme';
 
 interface Props {
-  marker: MapMarker | null;
+  /** A marker, or a no-go line (no dock, no move). */
+  marker: (Pick<MapMarker, 'name'> & { dock?: boolean }) | null;
+  title?: TextKey;
   /** Every marker's name on this map: a new name may not be one of them. */
   names: string[];
   onRename: (name: string) => void;
-  onMoveHere: () => void;
+  /** Markers only: put it where Lumi stands. */
+  onMoveHere?: () => void;
   onDelete: () => void;
   onClose: () => void;
 }
@@ -22,7 +26,15 @@ export function MarkerDialog(props: Props) {
   return props.marker ? <Edit key={props.marker.name} {...props} marker={props.marker} /> : null;
 }
 
-function Edit({ marker, names, onRename, onMoveHere, onDelete, onClose }: Props & { marker: MapMarker }) {
+function Edit({
+  marker,
+  title = 'mapEditMarker',
+  names,
+  onRename,
+  onMoveHere,
+  onDelete,
+  onClose,
+}: Props & { marker: NonNullable<Props['marker']> }) {
   const { t } = useI18n();
   const { width, height } = useWindowDimensions();
   const size = clamp(13, 0.022 * height, 17);
@@ -59,7 +71,7 @@ function Edit({ marker, names, onRename, onMoveHere, onDelete, onClose }: Props 
             },
           ]}
         >
-          <Text style={[styles.title, { fontSize: size * 0.8 }]}>{t('mapEditMarker')}</Text>
+          <Text style={[styles.title, { fontSize: size * 0.8 }]}>{t(title)}</Text>
           {marker.dock && <Text style={[styles.charger, { fontSize: size * 0.8 }]}>⌂ {t('mapChargerNote')}</Text>}
           <TextInput
             value={name}
@@ -79,13 +91,15 @@ function Edit({ marker, names, onRename, onMoveHere, onDelete, onClose }: Props 
             >
               <Text style={[styles.buttonText, font, { color: mono.red }]}>{t('delete')}</Text>
             </Pressable>
-            <Pressable
-              onPress={onMoveHere}
-              accessibilityRole="button"
-              style={({ pressed }) => [styles.button, button, pressed && styles.pressed]}
-            >
-              <Text style={[styles.buttonText, font, { color: mono.text }]}>{t('mapMoveHere')}</Text>
-            </Pressable>
+            {onMoveHere && (
+              <Pressable
+                onPress={onMoveHere}
+                accessibilityRole="button"
+                style={({ pressed }) => [styles.button, button, pressed && styles.pressed]}
+              >
+                <Text style={[styles.buttonText, font, { color: mono.text }]}>{t('mapMoveHere')}</Text>
+              </Pressable>
+            )}
             <View style={styles.gap} />
             <Pressable
               onPress={onClose}
