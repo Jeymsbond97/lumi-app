@@ -8,23 +8,24 @@ const batteryBottom = (s: typeof tablet) => s.insetTop + 50;
 const joystickTop = (s: typeof tablet) => s.height - (s.insetBottom + 18 + 44 + 10 + Math.min(200, Math.max(120, 0.27 * s.height)));
 
 describe('cameraLayout', () => {
-  for (const [what, s] of [
-    ['tablet', tablet],
-    ['phone', phone],
-  ] as const) {
-    it(`keeps the panel between the battery and the joystick on a ${what}`, () => {
-      const l = cameraLayout(s);
-      const bottom = l.top + 2 * l.pictureHeight + 3 * l.pad;
-      expect(l.top).toBeGreaterThan(batteryBottom(s));
-      expect(bottom).toBeLessThan(joystickTop(s));
-      expect(l.pictureHeight).toBeGreaterThan(0);
-    });
+  it('keeps the panel against the edge between the battery and the joystick on a tablet', () => {
+    const l = cameraLayout(tablet);
+    const bottom = l.top + 2 * l.pictureHeight + 3 * l.pad;
+    expect(l.right).toBe(0);
+    expect(l.top).toBeGreaterThan(batteryBottom(tablet));
+    expect(bottom).toBeLessThan(joystickTop(tablet));
+    expect(l.pictureWidth + 2 * l.pad + tablet.insetRight).toBeLessThanOrEqual(0.27 * tablet.width + 1);
+  });
 
-    it(`stays clear of the middle of the screen on a ${what}`, () => {
-      const l = cameraLayout(s);
-      expect(l.pictureWidth + 2 * l.pad + s.insetRight).toBeLessThanOrEqual(0.27 * s.width + 1);
-    });
-  }
+  it('moves the panel left of the joystick on a phone, with bigger pictures', () => {
+    const l = cameraLayout(phone);
+    const pad = 120; // the joystick on a 390 high screen
+    const bottom = l.top + 2 * l.pictureHeight + 3 * l.pad;
+    expect(l.right).toBeGreaterThanOrEqual(phone.insetRight + 24 + pad);
+    expect(l.top).toBeGreaterThan(batteryBottom(phone));
+    expect(bottom).toBeLessThan(phone.height - (phone.insetBottom + 18 + 64));
+    expect(l.pictureHeight).toBeGreaterThanOrEqual(80);
+  });
 
   it('keeps the pictures in the cameras shape', () => {
     const l = cameraLayout(tablet);
@@ -38,8 +39,9 @@ describe('cameraLayout', () => {
 
   it('gives no negative size on a tiny window', () => {
     const l = cameraLayout({ width: 300, height: 200, insetTop: 0, insetRight: 0, insetBottom: 0 });
-    expect(l.pictureHeight).toBe(0);
-    expect(l.pictureWidth).toBe(0);
+    expect(l.pictureHeight).toBeGreaterThanOrEqual(0);
+    expect(l.pictureWidth).toBeGreaterThanOrEqual(0);
+    expect(cameraLayout({ width: 100, height: 100, insetTop: 0, insetRight: 0, insetBottom: 0 }).pictureHeight).toBe(0);
   });
 });
 

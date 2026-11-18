@@ -1,6 +1,7 @@
 // Lumi's cameras on Home: a small camera button on the right edge, halfway down. Tapped, it opens a panel against the
 // right edge with the head camera over the torso camera, between the battery and the joystick and clear of Lumi in
-// the middle; the cross on it closes it back to the button.
+// the middle (on a phone on its side, left of the joystick down to the dock, where the pictures can be bigger); the
+// cross on it closes it back to the button.
 // Each camera's newest picture is asked for about 5 times a second, only while the panel is open, Home is the
 // screen shown and the app is in the foreground. Two pictures take turns: the next one loads hidden behind the shown
 // one, so a picture never blanks while the next is on its way.
@@ -241,7 +242,11 @@ export function CameraPanel() {
       key="panel"
       entering={FadeIn.duration(200)}
       exiting={FadeOut.duration(150)}
-      style={[styles.panel, { top: lay.top, padding: lay.pad, paddingRight: lay.pad + inset.right, gap: lay.pad }]}
+      style={[
+        styles.panel,
+        { top: lay.top, padding: lay.pad, gap: lay.pad },
+        lay.right > 0 ? [styles.panelFree, { right: lay.right }] : { paddingRight: lay.pad + inset.right },
+      ]}
     >
       {(['head', 'torso'] as const).map((name) => (
         <CameraFeed
@@ -261,7 +266,13 @@ export function CameraPanel() {
         accessibilityLabel={t('cameraClose')}
         style={({ pressed }) => [
           styles.close,
-          { top: lay.pad + 6, right: lay.pad + inset.right + 6, width: close, height: close, borderRadius: close / 2 },
+          {
+            top: lay.pad + 6,
+            right: lay.pad + (lay.right > 0 ? 0 : inset.right) + 6,
+            width: close,
+            height: close,
+            borderRadius: close / 2,
+          },
           pressed && styles.pressed,
         ]}
       >
@@ -277,6 +288,8 @@ const styles = StyleSheet.create({
   tab: { position: 'absolute', right: 0, borderTopLeftRadius: 14, borderBottomLeftRadius: 14, ...glass },
   tabPress: { flex: 1, alignItems: 'center', justifyContent: 'center' },
   panel: { position: 'absolute', right: 0, borderTopLeftRadius: 16, borderBottomLeftRadius: 16, ...glass },
+  // on a phone the panel sits left of the joystick, away from the edge: round and framed on every side
+  panelFree: { borderRadius: 16, borderRightWidth: 1 },
   picture: { borderRadius: 10, overflow: 'hidden', backgroundColor: '#050505', borderWidth: 1, borderColor: '#222' },
   quiet: { ...StyleSheet.absoluteFill, alignItems: 'center', justifyContent: 'center' },
   quietText: { fontFamily: fonts.mono, color: mono.soft, letterSpacing: 1, textTransform: 'uppercase' },

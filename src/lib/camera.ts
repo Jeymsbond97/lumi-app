@@ -44,8 +44,11 @@ export interface Screen {
 }
 
 export interface CameraLayout {
-  /** The panel's top edge and its picture size; its right side is the screen's right edge. */
+  /** The panel's top edge and its picture size. */
   top: number;
+  /** The panel's right side from the screen's right edge: 0 against the edge (tablets), or left of the joystick
+   *  where a short screen (a phone on its side) leaves too little room above the joystick. */
+  right: number;
   pictureWidth: number;
   pictureHeight: number;
   /** Space around and between the pictures; the right side also gets the safe area. */
@@ -59,8 +62,12 @@ export interface CameraLayout {
 // Taken from the components' own style code:
 // BatteryBadge: top 14 + inset.top, height 36.
 const BATTERY_BOTTOM = 14 + 36;
-// Joystick: bottom 18 + inset.bottom; a column of the pad (clamp(120, 0.27 h, 200)), a gap of 10 and the slider (44).
-const joystickTop = (s: Screen) => s.height - (s.insetBottom + 18 + 44 + 10 + clamp(120, 0.27 * s.height, 200));
+// Joystick: bottom 18 + inset.bottom, right 24 + inset.right; a column of the pad (clamp(120, 0.27 h, 200)), a gap of
+// 10 and the slider (44).
+const joystickPad = (s: Screen) => clamp(120, 0.27 * s.height, 200);
+const joystickTop = (s: Screen) => s.height - (s.insetBottom + 18 + 44 + 10 + joystickPad(s));
+// Dock: bottom 18 + inset.bottom, about 64 tall with its note (DOCK_SPACE on Map).
+const dockTop = (s: Screen) => s.height - (s.insetBottom + 18 + 64);
 
 /** Room left between the panel and the battery above it, and the joystick below it. */
 const GAP_TOP = 14;
@@ -68,17 +75,38 @@ const GAP_BOTTOM = 16;
 /** The panel never gets wider than this part of the screen, so Lumi in the middle stays clear. */
 const MAX_WIDTH_SHARE = 0.27;
 const PAD = 8;
+/** Pictures lower than this against the edge (a phone) move the panel left of the joystick, where it may be wider. */
+const MIN_EDGE_PICTURE = 80;
+const BESIDE_WIDTH_SHARE = 0.42;
+const GAP_SIDE = 12;
+
+/** The largest two pictures over each other that fit a band of this height and a panel of this width. */
+function pictures(band: number, panelWidth: number) {
+  const byHeight = Math.max(0, (band - 3 * PAD) / 2);
+  const byWidth = (panelWidth - 2 * PAD) / CAMERA_ASPECT;
+  const pictureHeight = Math.floor(Math.max(0, Math.min(byHeight, byWidth)));
+  return { pictureHeight, pictureWidth: Math.floor(pictureHeight * CAMERA_ASPECT) };
+}
 
 export function cameraLayout(s: Screen): CameraLayout {
   const bandTop = s.insetTop + BATTERY_BOTTOM + GAP_TOP;
-  const bandBottom = joystickTop(s) - GAP_BOTTOM;
-  const band = Math.max(0, bandBottom - bandTop);
 
-  // two pictures over each other, with the padding around and between them
-  const byHeight = Math.max(0, (band - 3 * PAD) / 2);
-  const byWidth = (MAX_WIDTH_SHARE * s.width - 2 * PAD - s.insetRight) / CAMERA_ASPECT;
-  const pictureHeight = Math.floor(Math.max(0, Math.min(byHeight, byWidth)));
-  const pictureWidth = Math.floor(pictureHeight * CAMERA_ASPECT);
+  // against the right edge, between the battery and the joystick
+  let band = Math.max(0, joystickTop(s) - GAP_BOTTOM - bandTop);
+  let right = 0;
+  let { pictureHeight, pictureWidth } = pictures(band, MAX_WIDTH_SHARE * s.width - s.insetRight);
+
+  // a phone on its side: left of the joystick, down to the dock, if that gives bigger pictures
+  if (pictureHeight < MIN_EDGE_PICTURE) {
+    const besideRight = s.insetRight + 24 + joystickPad(s) + GAP_SIDE;
+    const besideBand = Math.max(0, dockTop(s) - GAP_BOTTOM - bandTop);
+    const beside = pictures(besideBand, Math.min(BESIDE_WIDTH_SHARE * s.width, s.width - besideRight));
+    if (beside.pictureHeight > pictureHeight) {
+      ({ pictureHeight, pictureWidth } = beside);
+      band = besideBand;
+      right = besideRight;
+    }
+  }
 
   // a panel narrower than the band is tall is centred in it, like the button
   const panelHeight = 2 * pictureHeight + 3 * PAD;
@@ -88,6 +116,7 @@ export function cameraLayout(s: Screen): CameraLayout {
   const buttonWidth = Math.round(buttonHeight * 0.85);
   return {
     top,
+    right,
     pictureWidth,
     pictureHeight,
     pad: PAD,
