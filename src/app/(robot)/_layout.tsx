@@ -1,5 +1,5 @@
 // Every screen after the loading screen: Lumi is asked about once a second for all of them, and the status,
-// the modes, the current task, the sections and STOP sit on top of each screen.
+// the modes, the current task, the cameras, the sections and STOP sit on top of each screen.
 // While the landing view still covers the screen nothing shows over it (see lib/landing).
 import { StyleSheet, View } from 'react-native';
 import { Tabs, usePathname } from 'expo-router';
@@ -14,18 +14,21 @@ import { ModesPanel } from '../../ui/ModesPanel';
 import { TaskCard } from '../../ui/TaskCard';
 import { StopButton } from '../../ui/StopButton';
 import { Dock } from '../../ui/Dock';
+import { CameraPanel } from '../../ui/CameraPanel';
 import { colors } from '../../ui/theme';
 
 function Controls() {
   const { covering } = useLanding();
   const path = usePathname();
-  const camera = useCameraOpen(); // Home's camera panel covers where the readings and the task card sit
+  const camera = useCameraOpen(); // the camera panel covers where the readings and the task card sit
   if (covering) return null;
   return (
     <Animated.View style={StyleSheet.absoluteFill} entering={FadeIn.duration(450)} pointerEvents="box-none">
       <BatteryBadge />
       {path !== '/map' && <ModesPanel /> /* the map needs the room; its navbar has its own controls */}
       {!camera && <TaskCard />}
+      {/* the cameras open from the right edge on every section (owner, 2026-11-18) */}
+      <CameraPanel />
       <Dock />
       {/* the status bar's confirm dialog covers everything here but STOP */}
       <StatusHud hideReadings={camera} />

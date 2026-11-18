@@ -1,5 +1,5 @@
-// Whether Home's camera panel is open: the readings (head, waist, lift) and the task card sit where the panel is,
-// so the layout hides them meanwhile. A tiny store shared by the panel (Home) and the layout around every screen.
+// Whether the camera panel is open: the readings (head, waist, lift) and the task card sit where the panel is,
+// so the layout hides them meanwhile. A tiny store shared by the panel and the status around every screen.
 import { useSyncExternalStore } from 'react';
 
 let open = false;

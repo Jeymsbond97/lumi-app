@@ -1,16 +1,15 @@
-// Lumi's cameras on Home: a small camera button on the right edge, halfway down. Tapped, it opens a panel against the
-// right edge with the head camera over the torso camera, between the battery and the joystick and clear of Lumi in
-// the middle (on a phone on its side, left of the joystick down to the dock, where the pictures can be bigger); the
-// cross on it closes it back to the button.
-// Each camera's newest picture is asked for about 5 times a second, only while the panel is open, Home is the
-// screen shown and the app is in the foreground. Two pictures take turns: the next one loads hidden behind the shown
+// Lumi's cameras on every section (Home, Map and the ones to come): a small camera button on the right edge, halfway
+// down. Tapped, it opens a panel against the right edge with the head camera over the torso camera, between the
+// battery and the joystick and clear of the middle (on a phone on its side, left of the joystick down to the dock,
+// where the pictures can be bigger); the cross on it closes it back to the button. It stays open across sections.
+// Each camera's newest picture is asked for about 5 times a second, only while the panel is open and the app is in
+// the foreground. Two pictures take turns: the next one loads hidden behind the shown
 // one, so a picture never blanks while the next is on its way.
 import { useEffect, useRef, useState } from 'react';
 import { AppState, Image, Pressable, StyleSheet, Text, useWindowDimensions, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import Animated, { FadeIn, FadeOut } from 'react-native-reanimated';
 import Svg, { Circle, Path } from 'react-native-svg';
-import { useIsFocused } from 'expo-router';
 import * as Haptics from 'expo-haptics';
 import {
   cameraLayout,
@@ -190,7 +189,6 @@ export function CameraPanel() {
   const { connection } = useRobot();
   const { width, height } = useWindowDimensions();
   const inset = useSafeAreaInsets();
-  const focused = useIsFocused();
   const [open, setOpen] = useState(false);
   const [foreground, setForeground] = useState(AppState.currentState === 'active');
 
@@ -201,17 +199,16 @@ export function CameraPanel() {
 
   const lay = cameraLayout({ width, height, insetTop: inset.top, insetRight: inset.right, insetBottom: inset.bottom });
   const label = clamp(9, 0.016 * height, 12);
-  const active = open && focused && foreground;
+  const active = open && foreground;
   const toggle = (o: boolean) => {
     Haptics.selectionAsync().catch(() => {});
     setOpen(o);
   };
-  // the layout hides the readings and the task card under the panel while it shows (only on Home, in focus)
-  const shown = open && focused;
+  // the layout hides the readings and the task card under the panel while it shows
   useEffect(() => {
-    setCameraOpen(shown);
+    setCameraOpen(open);
     return () => setCameraOpen(false);
-  }, [shown]);
+  }, [open]);
 
   if (!open) {
     return (
