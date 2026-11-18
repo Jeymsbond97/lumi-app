@@ -2,11 +2,13 @@ import { useCallback, useEffect, useMemo, useRef, useState, type ComponentType, 
 import { Platform, StyleSheet, View } from 'react-native';
 import Animated, { FadeOut } from 'react-native-reanimated';
 import { Asset } from 'expo-asset';
+import { useIsFocused } from 'expo-router';
 import { WebView, type WebViewMessageEvent, type WebViewProps } from 'react-native-webview';
 import { SCENE_HTML } from '../../scene/sceneHtml';
 import { toSceneState, type SceneState } from '../../scene/sceneState';
 import { Joystick } from '../../ui/Joystick';
 import { useRobot } from '../../lib/robot';
+import { useLiveJoints } from '../../lib/useLiveJoints';
 import { colors } from '../../ui/theme';
 import { ConnectingView } from '../../ui/ConnectingView';
 import { useLanding } from '../../lib/landing';
@@ -54,7 +56,11 @@ export default function Home() {
   const web = useRef<WebView>(null);
   const [model, setModel] = useState<ModelSource | null>(null);
   const [sceneReady, setSceneReady] = useState(false);
-  const { status, joints } = useRobot();
+  const { status, joints, connection } = useRobot();
+  // the arm's joints 5 times a second while Home shows it and the arm has power (the round asks once a second)
+  const focused = useIsFocused();
+  const armOn = !!status && status.armState !== 'off' && !status.armSilent;
+  const liveJoints = useLiveJoints(connection.baseUrl, focused && armOn);
   const { done: landingDone } = useLanding();
   const html = useMemo(() => (model ? sceneHtml(model.glbUri) : ''), [model]);
   const frame = useRef<SceneFrame | null>(null);
@@ -90,8 +96,8 @@ export default function Home() {
 
   // the robot's pose follows every reply the layout gets
   useEffect(() => {
-    if (status) pushScene(toSceneState(status, joints));
-  }, [status, joints]);
+    if (status) pushScene(toSceneState(status, liveJoints ?? joints));
+  }, [status, joints, liveJoints]);
 
   const onMessage = (e: WebViewMessageEvent) => handle(e.nativeEvent.data);
   const handle = (data: string) => {

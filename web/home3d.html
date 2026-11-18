@@ -419,10 +419,53 @@ const ARM_COLOR = { off: [0.02, 0.02, 0.02], disabled: [0.1, 0.45, 2.2], enabled
                     error: [2.4, 0.12, 0.1], drag: [2.2, 1.6, 0.1] };
 const ARM_LABEL = { off: 'Arm off', disabled: 'Arm disabled', enabled: 'Arm enabled', error: 'Arm error', drag: 'Free drive' };
 const ARM_JOINTS = ['l_a1', 'l_a2', 'l_a3', 'l_a4', 'l_a5', 'l_a6'];
+// The joints glide between the app's updates instead of jumping (owner, 2026-11-18: a slow, even arm move looked
+// jerky here). The arm comes about 5 times a second, the body once a second: each group reaches its new pose at an
+// even speed over the time since its pose before, so an even move on the robot is an even move here, one update late.
+const GLIDE_MIN_MS = 60, GLIDE_MAX_MS = 1200;   // a first pose, or one after a long pause, is reached at once
+const GLIDE_STRETCH = 1.2;                      // a glide lasts a bit longer than the gap: a late update finds it still
+                                                // moving (no stop), and it never falls behind by more than that
+const BODY_KEYS = ['head', 'neck', 'waist', 'lift'];
+const glide = {
+  body: { from: null, to: null, sent: null, t0: 0, ms: 0, last: 0 },
+  arm: { from: null, to: null, sent: null, t0: 0, ms: 0, last: 0 },
+};
+let shown = null;                               // the pose drawn now: {head, neck, waist, lift, arm: [6]}
+let drawnAt = 0;                                // when `shown` was drawn: a new glide starts from there, so the next
+                                                // frame already moves a whole frame on (no still frame at an update)
+const bodyOf = o => BODY_KEYS.map(k => o[k]);
+function aim(g, from, to) {
+  // the same pose again (the body's status and the arm's joints come at different times) is no new update
+  if (g.sent && to.every((v, i) => v === g.sent[i])) return;
+  const now = performance.now(), since = now - g.last;
+  g.last = now; g.sent = to;
+  g.from = from; g.to = to; g.t0 = drawnAt && now - drawnAt < 100 ? drawnAt : now;
+  g.ms = since > GLIDE_MAX_MS ? 0 : Math.max(GLIDE_MIN_MS, since * GLIDE_STRETCH);
+}
+function poseTo() {                             // the state's pose is the new target of both groups
+  if (!shown) shown = { ...Object.fromEntries(BODY_KEYS.map(k => [k, state[k]])), arm: state.arm.slice() };
+  aim(glide.body, bodyOf(shown), bodyOf(state));
+  aim(glide.arm, shown.arm.slice(), state.arm.slice());
+}
+function glideStep(now) {
+  if (!shown) return;
+  drawnAt = now;
+  let moved = false;
+  for (const [g, put] of [[glide.body, v => BODY_KEYS.forEach((k, i) => (shown[k] = v[i]))], [glide.arm, v => (shown.arm = v)]]) {
+    if (!g.to) continue;
+    const k = g.ms ? Math.min(1, (now - g.t0) / g.ms) : 1;
+    put(g.from.map((a, i) => a + (g.to[i] - a) * k));
+    if (k >= 1) g.to = null;                    // arrived: rest until the next pose
+    moved = true;
+  }
+  if (!moved) return;
+  setJoint('l_3', shown.head); setJoint('l_4', shown.neck); setJoint('l_2', shown.waist); setJoint('l_1', shown.lift);
+  shown.arm.forEach((v, i) => setJoint(ARM_JOINTS[i], v));
+  renderer.shadowMap.needsUpdate = true;
+}
 function applyState() {
   renderer.shadowMap.needsUpdate = true;
-  setJoint('l_3', state.head); setJoint('l_4', state.neck); setJoint('l_2', state.waist); setJoint('l_1', state.lift);
-  state.arm.forEach((v, i) => setJoint(ARM_JOINTS[i], v));
+  poseTo();
   const c = ARM_COLOR[state.armState] || ARM_COLOR.off;
   if (armRing) armRing.material.color.setRGB(...c);
   const btn = document.getElementById('arm');
@@ -477,6 +520,7 @@ function adaptQuality() {
 }
 renderer.setAnimationLoop(() => {
   adaptQuality();
+  glideStep(performance.now());
   const t = clock.getElapsedTime();
   for (const m of [sky.material, terrainMat, floorMat, hudMat, beam.material, pMat, city, planet.material]) m.uniforms.uTime.value = t;
   hudMat.uniforms.uCharge.value = THREE.MathUtils.lerp(hudMat.uniforms.uCharge.value, charging ? 1 : 0, 0.05);

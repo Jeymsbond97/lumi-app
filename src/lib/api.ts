@@ -132,6 +132,14 @@ export async function getArmJoints(baseUrl: string, timeoutMs = 3000): Promise<n
   return !raw.error && Array.isArray(raw.joints) && raw.joints.length === 6 && raw.joints.every(num) ? raw.joints : null;
 }
 
+/** The arm's six joints in degrees from one controller read (GET /arm/joints, ~10 ms): for the live 3D arm. Throws
+ *  NeedsUpdateError on a robot API without it. */
+export async function getLiveArmJoints(baseUrl: string, timeoutMs = 1500): Promise<number[] | null> {
+  const raw = await orUpdate(getJson<{ joints?: unknown }>(baseUrl, '/arm/joints', timeoutMs));
+  const j = raw.joints;
+  return Array.isArray(j) && j.length === 6 && j.every(num) ? (j as number[]) : null;
+}
+
 // ---------- current task (/tasks/state, lumi-wave tasks/fetch.py) ----------
 interface RawTaskState {
   status?: string;
