@@ -1,0 +1,766 @@
+// The Commands screen (docs/COMMANDS.md): everything Lumi can do, each a tap or a tap and a small choice, grouped as
+// Arm & objects, Moving, Talking and Missions. Anything that moves the arm or the base asks first. The line under the
+// groups says how the last tap went (sent, refused and why), and what Lumi is doing; the task card on the right has
+// Pause, Release and Stop as on every screen. Missions has the typed command box: read as voice reads it first.
+// The content sits between the modes on the left, the task card on the right, the power chips on top and the Dock.
+import { useCallback, useEffect, useState } from 'react';
+import { Pressable, ScrollView, StyleSheet, Text, useWindowDimensions, View } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { useIsFocused } from 'expo-router';
+import * as Haptics from 'expo-haptics';
+import Svg, { Path } from 'react-native-svg';
+import { bodyPoseKnown, stepText as taskStepText, taskButtons, type TaskCommand } from '../../lib/api';
+import {
+  askRequest,
+  asideRequest,
+  blocked,
+  carryRequest,
+  comeRequest,
+  DOCK_MARKER,
+  DRIVE_METRES,
+  driveRequest,
+  fetchRequest,
+  fill,
+  followRequest,
+  giveRequest,
+  goRequest,
+  gripperRequest,
+  lookRequest,
+  parsedMoves,
+  parsedStart,
+  pickRequest,
+  placeRequest,
+  poseRequest,
+  read,
+  reasonKey,
+  receiveRequest,
+  sayRequest,
+  send,
+  singRequest,
+  stepVolume,
+  thingChoices,
+  thingId,
+  thingText,
+  toHolding,
+  toMarkers,
+  toOutcome,
+  toPoses,
+  toSkillState,
+  toSongs,
+  toVolume,
+  turnRequest,
+  volumeRequest,
+  VOLUME_STEP,
+  waveRequest,
+  type CarryThen,
+  type DriveDir,
+  type Finish,
+  type LookDir,
+  type Need,
+  type Outcome,
+  type Parsed,
+  type Request,
+  type SkillState,
+  type Song,
+  type Thing,
+  type TurnWay,
+  type Where,
+} from '../../lib/commands';
+import { useI18n, type TextKey } from '../../lib/i18n';
+import { useRobot } from '../../lib/robot';
+import { CommandIcon, type CommandIconName } from '../../ui/CommandIcon';
+import { ChoiceDialog, CommandBox, TextDialog, type Box, type ChoiceField } from '../../ui/CommandDialogs';
+import { ConfirmDialog, type ConfirmRequest } from '../../ui/ConfirmDialog';
+import { clamp, colors, fonts, mono } from '../../ui/theme';
+
+const POLL_MS = 1500; // the hand and the last skill, while this screen is open
+const DOCK_SPACE = 64; // room the sections dock takes at the bottom, above the safe area
+const SEEN_WAIT_MS = 3000; // the torso camera's objects when a choice of objects opens
+
+type Group = 'arm' | 'move' | 'talk' | 'mission';
+const GROUPS: { key: Group; label: TextKey }[] = [
+  { key: 'arm', label: 'cmdGroupArm' },
+  { key: 'move', label: 'cmdGroupMove' },
+  { key: 'talk', label: 'cmdGroupTalk' },
+  { key: 'mission', label: 'cmdGroupMission' },
+];
+
+type ChoiceKind = 'pick' | 'receive' | 'aside' | 'pose' | 'goto' | 'fetch' | 'carry' | 'drive' | 'turn' | 'look' | 'sing';
+
+/** One tap's request: `ask` is the question before it moves anything; `waits` it answers when done. */
+interface Run {
+  label: TextKey;
+  req: Request;
+  ask?: string;
+  waits?: boolean;
+  /** A skill: /skills/state tells how it goes. */
+  skill?: boolean;
+}
+
+interface Last extends Outcome {
+  label: TextKey;
+  at: number;
+  skill: boolean;
+  /** A reason the app knew before sending (blocked). */
+  key: TextKey | null;
+}
+
+interface Tile {
+  icon: CommandIconName;
+  label: TextKey;
+  hint?: TextKey;
+  needs?: Need[];
+  /** Why it can not run now, worked out here (the task buttons). */
+  off?: TextKey | null;
+  onPress: () => void;
+  wide?: boolean;
+  red?: boolean;
+}
+
+const TASK_TILES: { cmd: TaskCommand; icon: CommandIconName; label: TextKey }[] = [
+  { cmd: 'pause', icon: 'pause', label: 'pause' },
+  { cmd: 'resume', icon: 'resume', label: 'resume' },
+  { cmd: 'release', icon: 'release', label: 'release' },
+  { cmd: 'stop', icon: 'stop', label: 'stopTask' },
+];
+
+const EXAMPLES: TextKey[] = ['cmdEx1', 'cmdEx2', 'cmdEx3', 'cmdEx4'];
+const DIRS: { id: DriveDir; label: TextKey }[] = [
+  { id: 'forward', label: 'cmdDirForward' },
+  { id: 'back', label: 'cmdDirBack' },
+  { id: 'left', label: 'cmdDirLeft' },
+  { id: 'right', label: 'cmdDirRight' },
+];
+const TURNS: { id: TurnWay; label: TextKey; ask: TextKey }[] = [
+  { id: 'left', label: 'cmdTurnLeft', ask: 'cmdAskTurnLeft' },
+  { id: 'right', label: 'cmdTurnRight', ask: 'cmdAskTurnRight' },
+  { id: 'around', label: 'cmdTurnAround', ask: 'cmdAskTurnAround' },
+];
+const LOOKS: { id: LookDir; label: TextKey }[] = [
+  { id: 'left', label: 'cmdLookLeft' },
+  { id: 'right', label: 'cmdLookRight' },
+  { id: 'up', label: 'cmdLookUp' },
+  { id: 'down', label: 'cmdLookDown' },
+  { id: 'centre', label: 'cmdLookAhead' },
+];
+const CHOICE_TITLE: Record<ChoiceKind, TextKey> = {
+  pick: 'cmdPick',
+  receive: 'cmdReceive',
+  aside: 'cmdAside',
+  pose: 'cmdPose',
+  goto: 'cmdGoTo',
+  fetch: 'cmdFetch',
+  carry: 'cmdCarry',
+  drive: 'cmdDrive',
+  turn: 'cmdTurn',
+  look: 'cmdLook',
+  sing: 'cmdSing',
+};
+const SKILL_TEXT: Record<SkillState['status'], TextKey> = {
+  idle: 'cmdSent',
+  running: 'cmdSkillRunning',
+  done: 'cmdDone',
+  refused: 'cmdRefused',
+  stopped: 'cmdSkillStopped',
+  failed: 'cmdSkillFailed',
+};
+
+export default function CommandsScreen() {
+  const { t, lang } = useI18n();
+  const { connection, status, task, modes } = useRobot();
+  const url = connection.baseUrl;
+  const { width: w, height: h } = useWindowDimensions();
+  const inset = useSafeAreaInsets();
+  const focused = useIsFocused();
+
+  const [group, setGroup] = useState<Group>('arm');
+  const [markers, setMarkers] = useState<string[]>([]);
+  const [poses, setPoses] = useState<string[]>([]);
+  /** null: the robot has no GET /songs (yet); songs are then asked for by words. */
+  const [songs, setSongs] = useState<Song[] | null>(null);
+  const [volume, setVolume] = useState<number | null>(null);
+  const [holding, setHolding] = useState<boolean | null>(null);
+  const [skill, setSkill] = useState<(SkillState & { readAt: number }) | null>(null);
+  const [things, setThings] = useState<Thing[]>(() => thingChoices(null));
+  const [last, setLast] = useState<Last | null>(null);
+  const [choice, setChoice] = useState<ChoiceKind | null>(null);
+  const [values, setValues] = useState<Record<string, string>>({});
+  const [confirm, setConfirm] = useState<ConfirmRequest | null>(null);
+  const [text, setText] = useState<'say' | 'ask' | null>(null);
+  const [box, setBox] = useState<string | null>(null); // the typed command box, with its first words
+
+  // what the choices offer, read each time the screen opens; the hand and the skill while it is open
+  useEffect(() => {
+    if (!focused) return;
+    let on = true;
+    read(url, '/agv/markers').then((r) => on && setMarkers(toMarkers(r)));
+    read(url, '/arm/poses').then((r) => on && setPoses(toPoses(r)));
+    read(url, '/songs').then((r) => on && setSongs(r === null ? null : toSongs(r)));
+    read(url, '/volume').then((r) => on && setVolume(toVolume(r)));
+    const tick = () => {
+      const readAt = Date.now();
+      read(url, '/tasks/state', 3000).then((r) => on && r !== null && setHolding(toHolding(r)));
+      read(url, '/skills/state', 3000).then((r) => {
+        const s = toSkillState(r);
+        if (on && s) setSkill({ ...s, readAt });
+      });
+    };
+    tick();
+    const id = setInterval(tick, POLL_MS);
+    return () => {
+      on = false;
+      clearInterval(id);
+    };
+  }, [focused, url]);
+
+  const ready = { modes, armOn: status?.armState === 'enabled', holding };
+  const body = status?.body ?? null;
+  const headYaw = bodyPoseKnown(body) ? body.headYawDeg : null;
+
+  // ---------- sending ----------
+  const fire = useCallback(
+    (r: Run) => {
+      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => {});
+      const at = Date.now();
+      setLast({ label: r.label, at, skill: !!r.skill, key: null, phase: 'sending', reason: null, answer: null });
+      send(url, r.req).then((reply) => {
+        // a newer tap's line stays
+        setLast((prev) => (prev && prev.at !== at ? prev : { label: r.label, at, skill: !!r.skill, key: null, ...toOutcome(reply, !!r.waits) }));
+      });
+    },
+    [url],
+  );
+
+  const go = (r: Run) => {
+    if (!r.ask) return fire(r);
+    setConfirm({ title: r.ask, choices: [{ text: t('cmdGo'), onPress: () => fire(r) }] });
+  };
+
+  /** A tile's tap: what it needs first, else its run. */
+  const refuse = useCallback((label: TextKey, why: TextKey) => {
+    Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning).catch(() => {});
+    setLast({ label, at: Date.now(), skill: false, key: why, phase: 'refused', reason: null, answer: null });
+  }, []);
+  const tap = (tile: Tile) => {
+    const why = tile.off ?? blocked(tile.needs ?? [], ready);
+    if (why) refuse(tile.label, why);
+    else tile.onPress();
+  };
+
+  // ---------- choices ----------
+  const open = (kind: ChoiceKind, first: Record<string, string>) => {
+    Haptics.selectionAsync().catch(() => {});
+    setValues(first);
+    setChoice(kind);
+  };
+  const openThings = (kind: ChoiceKind) => {
+    const known = thingChoices(null);
+    setThings(known);
+    open(kind, { thing: thingId(known[0]) });
+    read(url, '/objects', SEEN_WAIT_MS).then((r) => {
+      if (r === null) return;
+      const seen = thingChoices(r);
+      setThings(seen);
+      // the nearest thing seen is the first choice, unless one was picked meanwhile
+      setValues((v) => (v.thing === thingId(known[0]) ? { ...v, thing: thingId(seen[0]) } : v));
+    });
+  };
+
+  const thingField: ChoiceField = {
+    key: 'thing',
+    title: 'cmdChooseObject',
+    options: things.map((x) => ({ id: thingId(x), label: thingText(x, t), note: x.seen ? t('cmdSeen') : undefined })),
+  };
+  const markerField = (key: string, title: TextKey, here: boolean): ChoiceField => ({
+    key,
+    title,
+    empty: 'cmdNoMarkers',
+    options: [...(here ? [{ id: 'here', label: t('cmdHere') }] : []), ...markers.map((m) => ({ id: m, label: m }))],
+  });
+
+  const fields = (kind: ChoiceKind): ChoiceField[] => {
+    switch (kind) {
+      case 'pick':
+      case 'receive':
+      case 'aside':
+        return [thingField];
+      case 'pose':
+        return [{ key: 'pose', title: 'cmdChoosePose', empty: 'cmdNoPoses', options: poses.map((p) => ({ id: p, label: p })) }];
+      case 'goto':
+        return [markerField('marker', 'cmdChooseMarker', false)];
+      case 'fetch':
+        return [
+          thingField,
+          markerField('from', 'cmdChooseFrom', true),
+          markerField('to', 'cmdChooseTo', true),
+          {
+            key: 'finish',
+            title: 'cmdChooseFinish',
+            options: [
+              { id: 'hold', label: t('cmdFinishHold') },
+              { id: 'place', label: t('cmdFinishPlace') },
+            ],
+          },
+        ];
+      case 'carry':
+        return [
+          markerField('to', 'cmdChooseTo', false),
+          {
+            key: 'then',
+            title: 'cmdChooseThen',
+            options: [
+              { id: 'hold', label: t('cmdFinishHold') },
+              { id: 'place', label: t('cmdFinishPlace') },
+              { id: 'give', label: t('cmdThenGive') },
+            ],
+          },
+        ];
+      case 'drive':
+        return [
+          { key: 'dir', title: 'cmdChooseDir', options: DIRS.map((d) => ({ id: d.id, label: t(d.label) })) },
+          { key: 'm', title: 'cmdChooseDistance', options: DRIVE_METRES.map((m) => ({ id: String(m), label: fill(t('cmdMetres'), { m }) })) },
+        ];
+      case 'turn':
+        return [{ key: 'way', title: 'cmdChooseTurn', options: TURNS.map((x) => ({ id: x.id, label: t(x.label) })) }];
+      case 'look':
+        return [{ key: 'dir', title: 'cmdChooseLook', options: LOOKS.map((x) => ({ id: x.id, label: t(x.label) })) }];
+      case 'sing':
+        return [
+          {
+            key: 'song',
+            title: 'cmdChooseSong',
+            options: [{ id: 'any', label: t('cmdAnySong') }, ...(songs ?? []).map((s) => ({ id: s.id, label: lang === 'ko' ? s.titleKo : s.title }))],
+          },
+        ];
+    }
+  };
+
+  /** What the choice dialog's GO starts. */
+  const runFor = (kind: ChoiceKind, v: Record<string, string>): Run | null => {
+    const thing = things.find((x) => thingId(x) === v.thing);
+    const where = (id: string): Where => (id === 'here' ? 'here' : { marker: id });
+    const said = (id: string) => (id === 'here' ? t('cmdHereSaid') : id === DOCK_MARKER ? t('cmdChargerSaid') : id);
+    switch (kind) {
+      case 'pick':
+        return thing ? { label: 'cmdPick', req: pickRequest(thing, lang), ask: fill(t('cmdAskPick'), { thing: thingText(thing, t) }) } : null;
+      case 'receive':
+        return thing
+          ? { label: 'cmdReceive', req: receiveRequest(thing, lang), ask: fill(t('cmdAskReceive'), { thing: thingText(thing, t) }) }
+          : null;
+      case 'aside':
+        return thing
+          ? { label: 'cmdAside', req: asideRequest(thing), ask: fill(t('cmdAskAside'), { thing: thingText(thing, t) }), skill: true }
+          : null;
+      case 'pose':
+        return { label: 'cmdPose', req: poseRequest(v.pose), ask: fill(t('cmdAskPose'), { pose: v.pose }), waits: true };
+      case 'goto':
+        return { label: 'cmdGoTo', req: goRequest(v.marker), ask: fill(t('cmdAskGo'), { marker: said(v.marker) }) };
+      case 'fetch':
+        return thing
+          ? {
+              label: 'cmdFetch',
+              req: fetchRequest(thing, where(v.from), where(v.to), v.finish as Finish),
+              ask: fill(t('cmdAskFetch'), { thing: thingText(thing, t), from: said(v.from), to: said(v.to) }),
+            }
+          : null;
+      case 'carry':
+        return { label: 'cmdCarry', req: carryRequest(v.to, v.then as CarryThen), ask: fill(t('cmdAskCarry'), { to: said(v.to) }) };
+      case 'drive': {
+        const dir = DIRS.find((d) => d.id === v.dir);
+        return dir
+          ? { label: 'cmdDrive', req: driveRequest(dir.id, Number(v.m), lang), ask: fill(t('cmdAskDrive'), { m: v.m, dir: t(dir.label) }) }
+          : null;
+      }
+      case 'turn': {
+        const way = TURNS.find((x) => x.id === v.way);
+        return way ? { label: 'cmdTurn', req: turnRequest(way.id, lang), ask: t(way.ask) } : null;
+      }
+      case 'look':
+        return { label: 'cmdLook', req: lookRequest(v.dir as LookDir, headYaw), waits: true };
+      case 'sing':
+        return { label: 'cmdSing', req: singRequest((songs ?? []).find((s) => s.id === v.song) ?? null, songs !== null) };
+    }
+  };
+  const choiceDone = () => {
+    const kind = choice;
+    setChoice(null);
+    const r = kind && runFor(kind, values);
+    if (r) go(r);
+  };
+
+  // ---------- typed commands ----------
+  const startParsed = (p: Parsed) => {
+    const req = parsedStart(p, lang);
+    if (!req) return;
+    setBox(null);
+    // the robot reads it back in English only: in Korean the box above already showed the steps
+    const question = lang === 'en' && p.sentence ? p.sentence : t('cmdAskStart');
+    const r: Run = { label: 'cmdType', req, ask: parsedMoves(p) ? question : undefined };
+    go(r);
+  };
+
+  const sendText = (words: string) => {
+    const kind = text;
+    setText(null);
+    if (kind === 'say') fire({ label: 'cmdSay', req: sayRequest(words, modes, lang), waits: true });
+    if (kind === 'ask') fire({ label: 'cmdAsk', req: askRequest(words, modes), waits: true });
+  };
+
+  const changeVolume = (by: number) => {
+    if (volume === null) return;
+    const next = stepVolume(volume, by);
+    setVolume(next);
+    fire({ label: 'cmdVolume', req: volumeRequest(next), waits: true });
+  };
+
+  // ---------- the tiles ----------
+  const firstMarker = markers.find((m) => m !== DOCK_MARKER) ?? markers[0] ?? '';
+  const buttons = task ? taskButtons(task) : [];
+
+  const TILES: Record<Group, Tile[]> = {
+    arm: [
+      { icon: 'pick', label: 'cmdPick', hint: 'cmdPickHint', needs: ['modes', 'arm', 'empty'], onPress: () => openThings('pick') },
+      {
+        icon: 'place',
+        label: 'cmdPlace',
+        hint: 'cmdPlaceHint',
+        needs: ['modes', 'arm', 'holding'],
+        onPress: () => go({ label: 'cmdPlace', req: placeRequest, ask: t('cmdAskPlace') }),
+      },
+      {
+        icon: 'give',
+        label: 'cmdGive',
+        hint: 'cmdGiveHint',
+        needs: ['modes', 'arm', 'holding'],
+        onPress: () => go({ label: 'cmdGive', req: giveRequest, ask: t('cmdAskGive') }),
+      },
+      { icon: 'receive', label: 'cmdReceive', hint: 'cmdReceiveHint', needs: ['modes', 'arm', 'empty'], onPress: () => openThings('receive') },
+      { icon: 'aside', label: 'cmdAside', hint: 'cmdAsideHint', needs: ['arm', 'empty'], onPress: () => openThings('aside') },
+      {
+        icon: 'wave',
+        label: 'cmdWave',
+        hint: 'cmdWaveHint',
+        needs: ['arm'],
+        onPress: () => go({ label: 'cmdWave', req: waveRequest, ask: t('cmdAskWave'), waits: true }),
+      },
+      { icon: 'pose', label: 'cmdPose', hint: 'cmdPoseHint', needs: ['arm'], onPress: () => open('pose', { pose: poses[0] ?? '' }) },
+      {
+        icon: 'gripOpen',
+        label: 'cmdGripOpen',
+        hint: 'cmdGripHint',
+        needs: ['arm'],
+        onPress: () => go({ label: 'cmdGripOpen', req: gripperRequest(true), ask: t('cmdAskGripOpen'), waits: true }),
+      },
+      {
+        icon: 'gripClose',
+        label: 'cmdGripClose',
+        hint: 'cmdGripHint',
+        needs: ['arm'],
+        onPress: () => go({ label: 'cmdGripClose', req: gripperRequest(false), ask: t('cmdAskGripClose'), waits: true }),
+      },
+    ],
+    move: [
+      {
+        icon: 'come',
+        label: 'cmdCome',
+        hint: 'cmdComeHint',
+        needs: ['patrol'],
+        onPress: () => go({ label: 'cmdCome', req: comeRequest, ask: t('cmdAskCome') }),
+      },
+      {
+        icon: 'follow',
+        label: 'cmdFollow',
+        hint: 'cmdFollowHint',
+        needs: ['patrol'],
+        onPress: () => go({ label: 'cmdFollow', req: followRequest, ask: t('cmdAskFollow') }),
+      },
+      { icon: 'goto', label: 'cmdGoTo', hint: 'cmdGoToHint', onPress: () => open('goto', { marker: firstMarker }) },
+      {
+        icon: 'dock',
+        label: 'cmdDock',
+        hint: 'cmdDockHint',
+        onPress: () => go({ label: 'cmdDock', req: goRequest(DOCK_MARKER), ask: t('cmdAskDock') }),
+      },
+      {
+        icon: 'fetch',
+        label: 'cmdFetch',
+        hint: 'cmdFetchHint',
+        needs: ['patrol', 'arm', 'empty'],
+        onPress: () => {
+          openThings('fetch');
+          setValues((v) => ({ ...v, from: firstMarker, to: 'here', finish: 'hold' }));
+        },
+      },
+      {
+        icon: 'carry',
+        label: 'cmdCarry',
+        hint: 'cmdCarryHint',
+        needs: ['patrol', 'arm', 'holding'],
+        onPress: () => open('carry', { to: firstMarker, then: 'hold' }),
+      },
+      { icon: 'drive', label: 'cmdDrive', hint: 'cmdDriveHint', needs: ['patrol'], onPress: () => open('drive', { dir: 'forward', m: '0.5' }) },
+      { icon: 'turn', label: 'cmdTurn', hint: 'cmdTurnHint', needs: ['patrol'], onPress: () => open('turn', { way: 'left' }) },
+      { icon: 'look', label: 'cmdLook', hint: 'cmdLookHint', onPress: () => open('look', { dir: 'centre' }) },
+    ],
+    talk: [
+      { icon: 'say', label: 'cmdSay', hint: 'cmdSayHint', onPress: () => setText('say') },
+      { icon: 'ask', label: 'cmdAsk', hint: 'cmdAskHint', onPress: () => setText('ask') },
+      // without the proposed /sing only the assistant sings (Greeter or Patrol on)
+      { icon: 'sing', label: 'cmdSing', hint: 'cmdSingHint', needs: songs === null ? ['modes'] : [], onPress: () => open('sing', { song: 'any' }) },
+    ],
+    mission: [
+      { icon: 'type', label: 'cmdType', hint: 'cmdTypeHint', wide: true, onPress: () => setBox('') },
+      ...TASK_TILES.map(
+        (x): Tile => ({
+          icon: x.icon,
+          label: x.label,
+          off: buttons.includes(x.cmd) ? null : 'cmdNoTask',
+          red: x.cmd === 'stop',
+          onPress: () => fire({ label: x.label, req: { path: `/tasks/${x.cmd}` } }),
+        }),
+      ),
+    ],
+  };
+
+  // ---------- layout ----------
+  const size = clamp(13, 0.024 * h, 17);
+  const modesText = clamp(13, 0.024 * h, 18); // ModesPanel's sizes: its switches stay clear
+  const switchW = clamp(36, 0.06 * h, 46);
+  const left = 26 + inset.left + 16 + 10 + modesText * 1.6 + modesText * 6.4 + switchW + 16;
+  const right = 24 + inset.right + (task ? clamp(220, 0.42 * h, 340) + 12 : clamp(11, 0.019 * h, 15) * 7 + 12);
+  const top = 14 + inset.top + Math.max(44, 0.075 * h);
+  const bottom = 18 + inset.bottom + DOCK_SPACE;
+  const area: Box = { left, right, top, bottom };
+  const inner = Math.max(200, w - left - right);
+  const gap = size * 0.6;
+  const cols = clamp(2, Math.floor((inner + gap) / (size * 9.5 + gap)), 5);
+  const tileW = (inner - gap * (cols - 1)) / cols;
+
+  const statusLine = (): { dot: string; head: string; words: string } => {
+    if (!last) {
+      if (!task) return { dot: mono.dim, head: t('cmdTask'), words: t('cmdNoTask') };
+      const k = taskStepText(task.step);
+      return { dot: mono.green, head: t('cmdTask'), words: k ? t(k) : task.step };
+    }
+    const head = t(last.label);
+    if (last.key) return { dot: mono.yellow, head, words: t(last.key) };
+    const said = (r: string | null) => {
+      const k = reasonKey(r);
+      return k ? t(k) : r ?? t('cmdRefused');
+    };
+    if (last.skill && last.phase === 'sent' && skill && skill.readAt > last.at && skill.status !== 'idle') {
+      const bad = skill.status === 'refused' || skill.status === 'stopped' || skill.status === 'failed';
+      return {
+        dot: skill.status === 'running' ? mono.blue : bad ? mono.yellow : mono.green,
+        head,
+        words: bad && skill.reason ? said(skill.reason) : t(SKILL_TEXT[skill.status]),
+      };
+    }
+    switch (last.phase) {
+      case 'sending':
+        return { dot: mono.soft, head, words: t('cmdSending') };
+      case 'sent':
+        return { dot: mono.green, head, words: t('cmdSent') };
+      case 'assistant':
+        return { dot: mono.green, head, words: t('cmdSentAssistant') };
+      case 'done':
+        return { dot: mono.green, head, words: t('cmdDone') };
+      case 'refused':
+        return { dot: mono.yellow, head, words: said(last.reason) };
+      case 'lost':
+        return { dot: mono.red, head, words: t('noAnswer') };
+    }
+  };
+  const line = statusLine();
+
+  return (
+    <View style={styles.root}>
+      <View style={[styles.area, { left, right, top, bottom, gap: size * 0.7 }]}>
+        <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.groupsScroll} contentContainerStyle={styles.groups}>
+          {GROUPS.map((g) => {
+            const on = g.key === group;
+            return (
+              <Pressable
+                key={g.key}
+                onPress={() => {
+                  Haptics.selectionAsync().catch(() => {});
+                  setGroup(g.key);
+                }}
+                accessibilityRole="tab"
+                accessibilityState={{ selected: on }}
+                hitSlop={4}
+                style={({ pressed }) => [
+                  styles.group,
+                  { paddingHorizontal: size * 0.9, paddingVertical: size * 0.5, gap: size * 0.4 },
+                  on && styles.groupOn,
+                  pressed && styles.pressed,
+                ]}
+              >
+                {on && <View style={[styles.dot, { width: size * 0.45, height: size * 0.45 }]} />}
+                <Text style={[styles.groupText, { fontSize: size * 0.85 }, on && styles.groupTextOn]}>{t(g.label)}</Text>
+              </Pressable>
+            );
+          })}
+        </ScrollView>
+
+        <View style={[styles.status, { gap: size * 0.5, paddingHorizontal: size * 0.8, paddingVertical: size * 0.45 }]} accessibilityLiveRegion="polite">
+          <View style={[styles.statusDot, { width: size * 0.55, height: size * 0.55, backgroundColor: line.dot }]} />
+          <Text style={[styles.statusHead, { fontSize: size * 0.8 }]}>{line.head}</Text>
+          {line.words !== '' && (
+            <Text style={[styles.statusWords, { fontSize: size * 0.85 }]} numberOfLines={2}>
+              {line.words}
+            </Text>
+          )}
+        </View>
+        {last?.answer && (
+          <Text style={[styles.answer, { fontSize: size * 0.85 }]} numberOfLines={3}>
+            {fill(t('cmdLumiSays'), { answer: last.answer })}
+          </Text>
+        )}
+
+        <ScrollView style={styles.tilesScroll} contentContainerStyle={[styles.tiles, { gap }]} showsVerticalScrollIndicator={false}>
+          {TILES[group].map((tile) => {
+            const why = tile.off ?? blocked(tile.needs ?? [], ready);
+            return (
+              <Pressable
+                key={tile.label}
+                onPress={() => tap(tile)}
+                accessibilityRole="button"
+                accessibilityLabel={t(tile.label)}
+                accessibilityHint={why ? t(why) : tile.hint && t(tile.hint)}
+                style={({ pressed }) => [
+                  styles.tile,
+                  {
+                    width: tile.wide ? inner : tileW,
+                    minHeight: size * 5.6,
+                    padding: size * 0.8,
+                    gap: size * 0.35,
+                  },
+                  tile.red && styles.tileRed,
+                  !!why && styles.tileOff,
+                  pressed && styles.pressed,
+                ]}
+              >
+                <CommandIcon name={tile.icon} size={size * 1.7} color={tile.red && !why ? mono.red : mono.text} />
+                <Text style={[styles.tileLabel, { fontSize: size * 0.92 }]} numberOfLines={2}>
+                  {t(tile.label)}
+                </Text>
+                {tile.hint && (
+                  <Text style={[styles.tileHint, { fontSize: size * 0.72 }]} numberOfLines={2}>
+                    {t(tile.hint)}
+                  </Text>
+                )}
+              </Pressable>
+            );
+          })}
+          {group === 'talk' && (
+            <View style={[styles.tile, { width: tileW, minHeight: size * 5.6, padding: size * 0.8, gap: size * 0.35 }]}>
+              <CommandIcon name="volume" size={size * 1.7} color={mono.text} />
+              <Text style={[styles.tileLabel, { fontSize: size * 0.92 }]}>{t('cmdVolume')}</Text>
+              <View style={[styles.stepper, { gap: size * 0.4 }]}>
+                <StepButton plus={false} size={size} onPress={() => changeVolume(-VOLUME_STEP)} disabled={volume === null} label={t('cmdVolumeDown')} />
+                <Text style={[styles.volume, { fontSize: size * 0.9, minWidth: size * 3.2 }]}>
+                  {volume === null ? '' : fill(t('cmdPercent'), { p: volume })}
+                </Text>
+                <StepButton plus size={size} onPress={() => changeVolume(VOLUME_STEP)} disabled={volume === null} label={t('cmdVolumeUp')} />
+              </View>
+            </View>
+          )}
+        </ScrollView>
+      </View>
+
+      {choice && (
+        <ChoiceDialog
+          box={area}
+          size={size}
+          title={t(CHOICE_TITLE[choice])}
+          fields={fields(choice)}
+          values={values}
+          onChange={(k, id) => setValues((v) => ({ ...v, [k]: id }))}
+          onDone={choiceDone}
+          onClose={() => setChoice(null)}
+        />
+      )}
+      {text && (
+        <TextDialog
+          box={area}
+          size={size}
+          title={text === 'say' ? 'cmdSayTitle' : 'cmdAskTitle'}
+          placeholder={text === 'say' ? 'cmdSayPlaceholder' : 'cmdAskPlaceholder'}
+          onSend={sendText}
+          onClose={() => setText(null)}
+        />
+      )}
+      {box !== null && (
+        <CommandBox
+          box={area}
+          size={size}
+          baseUrl={url}
+          initial={box}
+          examples={EXAMPLES}
+          onStart={startParsed}
+          onClose={() => setBox(null)}
+        />
+      )}
+      <ConfirmDialog request={confirm} onClose={() => setConfirm(null)} />
+    </View>
+  );
+}
+
+/** − or +, drawn (the mono font's minus sits off centre). */
+function StepButton({ plus, size, onPress, disabled, label }: { plus: boolean; size: number; onPress: () => void; disabled: boolean; label: string }) {
+  return (
+    <Pressable
+      onPress={onPress}
+      disabled={disabled}
+      hitSlop={6}
+      accessibilityRole="button"
+      accessibilityLabel={label}
+      style={({ pressed }) => [styles.stepBtn, { width: size * 2.2, height: size * 2.2 }, disabled && styles.tileOff, pressed && styles.pressed]}
+    >
+      <Svg width={size} height={size} viewBox="0 0 24 24">
+        <Path d={plus ? 'M5 12h14M12 5v14' : 'M5 12h14'} stroke={mono.text} strokeWidth={2.2} strokeLinecap="round" />
+      </Svg>
+    </Pressable>
+  );
+}
+
+const styles = StyleSheet.create({
+  root: { flex: 1, backgroundColor: colors.bg },
+  area: { position: 'absolute' },
+  groupsScroll: { flexGrow: 0 },
+  groups: { gap: 4, padding: 4, borderRadius: 999, backgroundColor: 'rgba(8,8,8,0.92)', borderWidth: 1, borderColor: '#333' },
+  group: { flexDirection: 'row', alignItems: 'center', borderRadius: 999 },
+  groupOn: { backgroundColor: 'rgba(255,255,255,0.09)' },
+  groupText: { fontFamily: fonts.mono, color: mono.soft, letterSpacing: 1.2, textTransform: 'uppercase' },
+  groupTextOn: { fontFamily: fonts.monoBold, color: mono.text },
+  dot: { borderRadius: 99, backgroundColor: mono.red },
+  status: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: '#262626',
+    backgroundColor: 'rgba(255,255,255,0.025)',
+  },
+  statusDot: { borderRadius: 99 },
+  statusHead: { fontFamily: fonts.monoBold, color: mono.text, letterSpacing: 1.2, textTransform: 'uppercase' },
+  statusWords: { fontFamily: fonts.mono, color: mono.soft, flexShrink: 1 },
+  answer: { fontFamily: fonts.mono, color: mono.text, paddingHorizontal: 4 },
+  tilesScroll: { flex: 1 },
+  tiles: { flexDirection: 'row', flexWrap: 'wrap', paddingBottom: 8 },
+  tile: {
+    borderRadius: 16,
+    borderWidth: 1,
+    borderColor: '#2e2e2e',
+    backgroundColor: '#0e0f11',
+  },
+  tileRed: { borderColor: 'rgba(255,45,45,0.55)' },
+  tileOff: { opacity: 0.38 },
+  tileLabel: { fontFamily: fonts.monoBold, color: mono.text, letterSpacing: 1, textTransform: 'uppercase' },
+  tileHint: { fontFamily: fonts.mono, color: mono.soft },
+  stepper: { flexDirection: 'row', alignItems: 'center' },
+  stepBtn: { borderRadius: 999, borderWidth: 1, borderColor: '#444', alignItems: 'center', justifyContent: 'center' },
+  volume: { fontFamily: fonts.mono, color: mono.text, textAlign: 'center' },
+  pressed: { opacity: 0.6 },
+});

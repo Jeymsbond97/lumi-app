@@ -19,7 +19,7 @@ interface Section {
 
 export const SECTIONS: Section[] = [
   { label: 'tabHome', route: '/home', path: '/home' },
-  { label: 'tabCommands', route: null, path: '/commands' },
+  { label: 'tabCommands', route: '/commands', path: '/commands' },
   { label: 'tabDrive', route: '/drive', path: '/drive' },
   { label: 'tabMap', route: '/map', path: '/map' },
   { label: 'tabTalk', route: null, path: '/talk' },

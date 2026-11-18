@@ -1,0 +1,284 @@
+import type { Modes } from '../api';
+import {
+  askRequest,
+  blocked,
+  carryRequest,
+  fetchRequest,
+  fill,
+  lookRequest,
+  parsedMoves,
+  parsedStart,
+  pickRequest,
+  reasonKey,
+  reasonOf,
+  sayRequest,
+  singRequest,
+  stepLine,
+  stepText,
+  stepVolume,
+  thingChoices,
+  thingText,
+  toMarkers,
+  toOutcome,
+  toParsed,
+  toPoses,
+  toSkillState,
+  toSongs,
+  turnRequest,
+} from '../commands';
+
+const off: Modes = { greeter: false, patrol: false, wave_greet: false, welcome: false };
+const greeter: Modes = { ...off, greeter: true };
+const patrol: Modes = { ...off, patrol: true };
+
+describe('reasonOf', () => {
+  it('reads FastAPI refusals, a text or a list of field errors', () => {
+    expect(reasonOf({ detail: 'Switch on Greeter or Patrol first.' })).toBe('Switch on Greeter or Patrol first.');
+    expect(reasonOf({ detail: [{ msg: 'field required' }, { msg: 'bad value' }] })).toBe('field required; bad value');
+    expect(reasonOf({ ok: true })).toBeNull();
+    expect(reasonOf(null)).toBeNull();
+  });
+
+  it('names the refusals people meet most in both languages', () => {
+    expect(reasonKey('Switch on Greeter or Patrol first.')).toBe('cmdNeedModes');
+    expect(reasonKey("I can't drive or turn my waist right now. Switch on Patrol for that.")).toBe('cmdNeedPatrol');
+    expect(reasonKey('Busy with a task. Pause or stop it first.')).toBe('busy');
+    expect(reasonKey('The cup is too far')).toBeNull();
+  });
+});
+
+describe('fill', () => {
+  it('puts values in and leaves unknown names', () => {
+    expect(fill('Drive {m} m {dir}?', { m: 0.5, dir: 'forward' })).toBe('Drive 0.5 m forward?');
+    expect(fill('{a} {b}', { a: 1 })).toBe('1 {b}');
+  });
+});
+
+describe('thingChoices', () => {
+  it('offers what the camera sees, nearest first and once each, then every object in any colour', () => {
+    const raw = {
+      objects: [
+        { name: 'chair', colour: 'blue', distance_m: 1 },
+        { name: 'cup', colour: 'white', distance_m: 0.9 },
+        { name: 'cup', colour: 'blue', distance_m: 0.6 },
+        { name: 'cup', colour: 'blue', distance_m: 0.7 },
+        { name: 'apple', colour: 'mauve', distance_m: null },
+      ],
+    };
+    const got = thingChoices(raw);
+    expect(got.slice(0, 3)).toEqual([
+      { object: 'cup', colour: 'blue', seen: true },
+      { object: 'cup', colour: 'white', seen: true },
+      { object: 'apple', colour: null, seen: true },
+    ]);
+    expect(got.slice(3).map((t) => t.object)).toEqual(['cup', 'bottle', 'apple', 'orange', 'banana']);
+  });
+
+  it('still offers every object when the camera does not answer', () => {
+    expect(thingChoices(null)).toHaveLength(5);
+  });
+
+  it('says the colour before the object', () => {
+    const tr = (k: string) => ({ colBlue: '파란', objCup: '컵' })[k] ?? k;
+    expect(thingText({ object: 'cup', colour: 'blue', seen: true }, tr as never)).toBe('파란 컵');
+    expect(thingText({ object: 'cup', colour: null, seen: false }, tr as never)).toBe('컵');
+  });
+});
+
+describe('readings', () => {
+  it('reads markers, poses in the dashboard order and songs', () => {
+    expect(toMarkers({ markers: ['home', 'p1', 3, ''] })).toEqual(['home', 'p1']);
+    expect(toMarkers({ error: 'timeout' })).toEqual([]);
+    expect(toPoses({ wave: [0], zeta: [0], look: [0], give: [0], broken: 'x' })).toEqual(['look', 'give', 'wave', 'zeta']);
+    expect(toSongs({ songs: [{ id: 'A', title: 'BAD', title_ko: '배드' }, { id: 'B', title: 'X' }, { title: 'no id' }] })).toEqual([
+      { id: 'A', title: 'BAD', titleKo: '배드' },
+      { id: 'B', title: 'X', titleKo: 'X' },
+    ]);
+    expect(toSongs(null)).toEqual([]);
+  });
+
+  it('steps the volume in tens within 0 to 100', () => {
+    expect(stepVolume(55, 10)).toBe(70);
+    expect(stepVolume(60, -10)).toBe(50);
+    expect(stepVolume(95, 10)).toBe(100);
+    expect(stepVolume(5, -10)).toBe(0);
+  });
+
+  it('reads the last skill with its reason', () => {
+    expect(toSkillState({ status: 'refused', skill: 'move', reason: 'no cup seen', log: [] })).toEqual({
+      status: 'refused',
+      skill: 'move',
+      reason: 'no cup seen',
+    });
+    expect(toSkillState({ status: 'idle', log: [] })).toEqual({ status: 'idle', skill: null, reason: null });
+    expect(toSkillState({ status: 'new' })).toBeNull();
+  });
+});
+
+describe('requests', () => {
+  it('picks as a one step mission, the way voice does it', () => {
+    expect(pickRequest({ object: 'cup', colour: 'blue', seen: true }, 'ko')).toEqual({
+      path: '/tasks/steps',
+      body: { steps: [{ do: 'pick', object: 'cup', colour: 'blue' }], lang: 'ko', sender: null },
+      timeoutMs: 10000,
+    });
+  });
+
+  it('fetches from a marker to here or a marker, and carries with what to do there', () => {
+    expect(fetchRequest({ object: 'apple', colour: null, seen: false }, { marker: 'p1' }, 'here', 'place').body).toEqual({
+      object: 'apple',
+      colour: null,
+      source: { marker: 'p1' },
+      dest: 'here',
+      finish: 'place',
+    });
+    expect(carryRequest('p3', 'hold').body).toEqual({ dest: { marker: 'p3' }, then: null, on: null });
+    expect(carryRequest('p3', 'give').body).toEqual({ dest: { marker: 'p3' }, then: 'give', on: null });
+  });
+
+  it('turns left with a positive angle', () => {
+    expect(turnRequest('left', 'en').body).toMatchObject({ steps: [{ do: 'turn', deg: 90 }] });
+    expect(turnRequest('right', 'en').body).toMatchObject({ steps: [{ do: 'turn', deg: -90 }] });
+    expect(turnRequest('around', 'en').body).toMatchObject({ steps: [{ do: 'turn', deg: 180 }] });
+  });
+
+  it('looks left with a positive yaw, and up or down keeping the yaw the head has', () => {
+    expect(lookRequest('left', 10).body).toEqual({ yaw: 40 });
+    expect(lookRequest('right', null).body).toEqual({ yaw: -40 });
+    expect(lookRequest('up', 12).body).toEqual({ yaw: 12, pitch: 20 });
+    expect(lookRequest('down', null).body).toEqual({ yaw: 0, pitch: -5 });
+    expect(lookRequest('centre', 30).body).toEqual({ yaw: 0, pitch: -5 });
+  });
+
+  it('says and asks through the assistant while it runs (it owns the speaker), else directly', () => {
+    expect(sayRequest('hi', off, 'en')).toMatchObject({ path: '/say', body: { text: 'hi' } });
+    expect(sayRequest('hi', greeter, 'en')).toMatchObject({ path: '/tasks/steps', body: { steps: [{ do: 'say', text: 'hi' }] } });
+    expect(askRequest('what time is it', null)).toMatchObject({ path: '/ask', body: { question: 'what time is it', speak: true } });
+    expect(askRequest('what time is it', patrol)).toMatchObject({ path: '/tasks/command', body: { text: 'what time is it' } });
+  });
+
+  it('sings by id with the proposed /sing, else with the words voice takes', () => {
+    const song = { id: 'RESCENE_LOVE_ATTACK', title: 'Love Attack', titleKo: '러브 어택' };
+    expect(singRequest(song, true)).toEqual({ path: '/sing', body: { id: 'RESCENE_LOVE_ATTACK' } });
+    expect(singRequest(null, true)).toEqual({ path: '/sing', body: { id: null } });
+    expect(singRequest(song, false)).toMatchObject({ path: '/tasks/command', body: { text: 'sing Love Attack' } });
+    expect(singRequest(null, false)).toMatchObject({ body: { text: 'sing a song' } });
+  });
+});
+
+describe('blocked', () => {
+  const ready = { modes: greeter, armOn: true, holding: false };
+
+  it('asks for Greeter or Patrol, Patrol for the base, the arm, and the right hand', () => {
+    expect(blocked(['modes', 'arm', 'empty'], ready)).toBeNull();
+    expect(blocked(['modes'], { ...ready, modes: off })).toBe('cmdNeedModes');
+    expect(blocked(['modes'], { ...ready, modes: null })).toBe('cmdNeedModes');
+    expect(blocked(['patrol'], ready)).toBe('cmdNeedPatrol');
+    expect(blocked(['patrol'], { ...ready, modes: patrol })).toBeNull();
+    expect(blocked(['arm'], { ...ready, armOn: false })).toBe('cmdNeedArm');
+    expect(blocked(['empty'], { ...ready, holding: true })).toBe('cmdNeedEmpty');
+    expect(blocked(['holding'], ready)).toBe('cmdNeedHolding');
+  });
+
+  it('does not stop anything on a hand it does not know about', () => {
+    expect(blocked(['empty'], { ...ready, holding: null })).toBeNull();
+    expect(blocked(['holding'], { ...ready, holding: null })).toBeNull();
+  });
+});
+
+describe('typed commands', () => {
+  // shapes of lumi-wave api/server.py task_parse replies
+  it('starts a mission with the language it was written in', () => {
+    const p = toParsed({
+      action: 'steps',
+      steps: [{ do: 'pick', object: 'cup', colour: null }, { do: 'place', on: null }],
+      lang: 'ko',
+      sender: null,
+      sentence: 'Take the cup, then put it on the table.',
+      problems: [],
+      read_by: 'rules',
+    });
+    expect(parsedStart(p, 'en')).toEqual({
+      path: '/tasks/steps',
+      body: { steps: [{ do: 'pick', object: 'cup', colour: null }, { do: 'place', on: null }], lang: 'ko', sender: null },
+      timeoutMs: 10000,
+    });
+    expect(parsedMoves(p)).toBe(true);
+  });
+
+  it('starts a fetch, a carry, a give and a place with their own endpoints', () => {
+    const task = { object: 'apple', colour: 'red', source: { marker: 'p1' }, dest: { marker: 'home' }, finish: 'hold' };
+    expect(parsedStart(toParsed({ action: 'fetch', task, problems: [], sentence: 'x' }), 'en')).toMatchObject({ path: '/tasks/fetch', body: task });
+    expect(
+      parsedStart(toParsed({ action: 'carry', task: { dest: { marker: 'p2' }, then: 'give', on: null }, problems: [] }), 'en'),
+    ).toMatchObject({ path: '/tasks/carry', body: { dest: { marker: 'p2' }, then: 'give', on: null } });
+    expect(parsedStart(toParsed({ action: 'give', task: { on: null }, problems: [] }), 'en')).toMatchObject({ path: '/tasks/give' });
+    expect(parsedStart(toParsed({ action: 'place', task: { on: { name: 'chair', colour: 'orange' } }, problems: [] }), 'en')).toEqual({
+      path: '/tasks/place',
+      body: { on: { name: 'chair', colour: 'orange' } },
+    });
+  });
+
+  it('hands commands and answers to the assistant; only moves are asked first', () => {
+    const follow = toParsed({ action: 'command', text: 'follow me', sentence: 'Follow me.', problems: [], base: true });
+    expect(parsedStart(follow, 'en')).toMatchObject({ path: '/tasks/command', body: { text: 'follow me' } });
+    expect(parsedMoves(follow)).toBe(true);
+    const song = toParsed({ action: 'command', text: 'sing a song', talk: 'sing', sentence: 'Sing.', problems: [] });
+    expect(parsedMoves(song)).toBe(false);
+    expect(parsedMoves(toParsed({ action: 'command', text: 'stop', sentence: 'Stop.', problems: [] }))).toBe(false);
+  });
+
+  it('starts nothing with a problem or no action, and drops the robot\'s dash for nothing', () => {
+    const p = toParsed({ action: null, task: null, talk: 'talk', sentence: '–', problems: ["I didn't understand: dance"] });
+    expect(p.sentence).toBe('');
+    expect(parsedStart(p, 'en')).toBeNull();
+    expect(parsedStart(toParsed({ action: 'fetch', task: {}, problems: ['Where should I bring it?'] }), 'en')).toBeNull();
+    expect(parsedMoves(p)).toBe(false);
+  });
+});
+
+describe('toOutcome', () => {
+  it('tells sent, done, done by the assistant, refused with its reason and no answer apart', () => {
+    expect(toOutcome({ ok: true, data: { ok: true, by: 'api' } }, false).phase).toBe('sent');
+    expect(toOutcome({ ok: true, data: { ok: true } }, true).phase).toBe('done');
+    expect(toOutcome({ ok: true, data: { ok: true, by: 'assistant' } }, false).phase).toBe('assistant');
+    expect(toOutcome({ ok: false, status: 409, reason: 'Busy with a task. Pause or stop it first.' }, false)).toEqual({
+      phase: 'refused',
+      reason: 'Busy with a task. Pause or stop it first.',
+      answer: null,
+    });
+    expect(toOutcome({ ok: false, status: 0, reason: null }, true).phase).toBe('lost');
+  });
+
+  it('keeps the answer /ask gives back', () => {
+    expect(toOutcome({ ok: true, data: { answer: ' I can fetch things. ', llm_seconds: 1.2 } }, true).answer).toBe('I can fetch things.');
+  });
+});
+
+describe('stepLine', () => {
+  const words: Record<string, string> = {
+    cmdStepGo: 'Go to {to}',
+    cmdStepMove: 'Drive {m} m {dir}',
+    cmdDirRight: 'right',
+    cmdStepTurnRight: 'Turn right {deg}°',
+    cmdStepPickColour: 'Take the {colour} {object}',
+    colRed: 'red',
+    objApple: 'apple',
+    cmdStepWait: 'Wait {s} s',
+    cmdStepSay: 'Say “{text}”',
+    cmdStepOther: 'Do {name}',
+    cmdStepGoBack: 'Come back here',
+  };
+  const say = (s: Record<string, unknown>) => stepText(stepLine(s), ((k: string) => words[k] ?? k) as never);
+
+  it('writes every step of docs/17 as a line', () => {
+    expect(say({ do: 'go', to: 'p3' })).toBe('Go to p3');
+    expect(say({ do: 'go', to: 'here' })).toBe('Come back here');
+    expect(say({ do: 'move', dir: 'right', m: 1 })).toBe('Drive 1 m right');
+    expect(say({ do: 'turn', deg: -90 })).toBe('Turn right 90°');
+    expect(say({ do: 'pick', object: 'apple', colour: 'red' })).toBe('Take the red apple');
+    expect(say({ do: 'wait', s: 120 })).toBe('Wait 120 s');
+    expect(say({ do: 'say', text: 'Anvar says hello' })).toBe('Say “Anvar says hello”');
+    expect(say({ do: 'dance' })).toBe('Do dance');
+  });
+});

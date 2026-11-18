@@ -59,6 +59,7 @@ export default function RobotLayout() {
           >
             {/* every section has to be declared, else this router draws nothing */}
             <Tabs.Screen name="home" />
+            <Tabs.Screen name="commands" />
             <Tabs.Screen name="map" />
             <Tabs.Screen name="drive" />
           </Tabs>
