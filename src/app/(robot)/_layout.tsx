@@ -13,6 +13,7 @@ import { BatteryBadge } from '../../ui/BatteryBadge';
 import { ModesPanel } from '../../ui/ModesPanel';
 import { TaskCard } from '../../ui/TaskCard';
 import { StopButton } from '../../ui/StopButton';
+import { EstopButton } from '../../ui/EstopButton';
 import { Dock } from '../../ui/Dock';
 import { CameraPanel } from '../../ui/CameraPanel';
 import { colors } from '../../ui/theme';
@@ -33,6 +34,7 @@ function Controls() {
       {/* the status bar's confirm dialog covers everything here but STOP */}
       <StatusHud hideReadings={camera || path === '/drive' /* Drive's BODY page shows them */} />
       <StopButton />
+      <EstopButton />
     </Animated.View>
   );
 }
