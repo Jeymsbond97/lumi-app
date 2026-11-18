@@ -139,26 +139,25 @@ function Icon({ item, color }: { item: Item; color: string }) {
   );
 }
 
-/** A marker's dot in Footprint's 100 x 100 box: about 9 px across, at most 60 % of the box. */
-const markerDotR = (size: number) => Math.min(30, Math.max(12, (4.5 * 100) / size));
+/** Markers and Lumi are drawn at least this big (px), however far the map is zoomed out. */
+const MARKER_MIN = 16;
+const LUMI_MIN = 24;
 
-/** Lumi's base at its true size on the map (a rounded square) with an arrow to its front (+x of the pose). */
-function Footprint({ size, stroke, fill, outline = true }: { size: number; stroke: string; fill: string; outline?: boolean }) {
+/** A marker like on the base's own page (:9001): a filled triangle pointing to its heading (+x), dark edged. */
+function MarkerMark({ size, color }: { size: number; color: string }) {
   return (
     <Svg width={size} height={size} viewBox="0 0 100 100">
-      {outline ? (
-        <Rect x={4} y={4} width={92} height={92} rx={20} stroke={stroke} strokeWidth={size < 16 ? 12 : 6} fill={fill} />
-      ) : (
-        <Circle cx={50} cy={50} r={markerDotR(size)} fill={stroke} />
-      )}
-      <Path
-        d="M50 50 L86 50 M70 34 L86 50 L70 66"
-        stroke={stroke}
-        strokeWidth={size < 16 ? 12 : 8}
-        fill="none"
-        strokeLinecap="round"
-        strokeLinejoin="round"
-      />
+      <Path d="M90 50 L18 16 L30 50 L18 84 Z" fill={color} stroke="#000" strokeWidth={7} strokeLinejoin="round" />
+    </Svg>
+  );
+}
+
+/** Lumi's base on the map like on :9001: a thin rounded square with a filled triangle to its front (+x of the pose). */
+function Footprint({ size, stroke, fill }: { size: number; stroke: string; fill: string }) {
+  return (
+    <Svg width={size} height={size} viewBox="0 0 100 100">
+      <Rect x={4} y={4} width={92} height={92} rx={22} stroke={stroke} strokeWidth={size < 30 ? 8 : 5} fill={fill} />
+      <Path d="M78 50 L30 26 L38 50 L30 74 Z" fill={stroke} stroke="#000" strokeWidth={5} strokeLinejoin="round" />
     </Svg>
   );
 }
@@ -925,7 +924,9 @@ export default function MapScreen() {
 
   const pose = scanning ? scanning.pose : (status?.pose ?? null); // on the new map while mapping
   const lumi = pose && info ? toView(pose.x, pose.y) : null;
-  const size = info ? footprintPx(info.resolution, scale) : 0; // Lumi's 510 mm base on screen, markers the same
+  const size = info ? footprintPx(info.resolution, scale) : 0; // Lumi's 510 mm base on screen
+  const markerSize = Math.max(MARKER_MIN, size * 0.7);
+  const lumiSize = Math.max(LUMI_MIN, size);
   const target = picked !== null || point !== null; // a marker or a point is picked: the bar shows
   const navTop = 14 + inset.top + Math.max(44, 0.075 * h);
 
@@ -1125,7 +1126,7 @@ export default function MapScreen() {
     list = (
       <>
         <Pressable onPress={startDrawing} style={({ pressed }) => [styles.row, pressed && styles.pressed]}>
-          <Text style={[styles.rowText, styles.rowAddLine]}>+ {t('mapNewLine')}</Text>
+          <Text style={[styles.rowText, styles.rowAdd]}>+ {t('mapAddLine')}</Text>
         </Pressable>
         {info.lines.length > 0 && <View style={styles.sep} />}
         {info.lines.map((l) => (
@@ -1242,19 +1243,19 @@ export default function MapScreen() {
                   setPoint(null);
                   setMenu(null);
                 }}
-                hitSlop={Math.max(0, (24 - size) / 2)}
+                hitSlop={Math.max(0, (28 - markerSize) / 2)}
                 style={{
                   position: 'absolute',
-                  left: p.x - size / 2,
-                  top: p.y - size / 2,
-                  width: size,
-                  height: size,
+                  left: p.x - markerSize / 2,
+                  top: p.y - markerSize / 2,
+                  width: markerSize,
+                  height: markerSize,
                   transform: [{ rotate: `${-m.theta}rad` }],
                 }}
               >
-                <Footprint size={size} stroke={stroke} fill="none" outline={false} />
+                <MarkerMark size={markerSize} color={stroke} />
               </Pressable>
-              <View pointerEvents="none" style={[styles.label, { left: p.x - 60, top: p.y - (size * markerDotR(size)) / 100 - 16 }]}>
+              <View pointerEvents="none" style={[styles.labelRight, { left: p.x + markerSize / 2 + 1, top: p.y - 9 }]}>
                 <Text style={[styles.markerText, on && styles.markerTextOn]}>{m.name}</Text>
               </View>
             </View>
@@ -1365,12 +1366,12 @@ export default function MapScreen() {
             pointerEvents="none"
             style={{
               position: 'absolute',
-              left: lumi.x - size / 2,
-              top: lumi.y - size / 2,
+              left: lumi.x - lumiSize / 2,
+              top: lumi.y - lumiSize / 2,
               transform: [{ rotate: `${-(pose?.theta ?? 0)}rad` }],
             }}
           >
-            <Footprint size={size} stroke={mono.green} fill="rgba(61,255,139,0.28)" />
+            <Footprint size={lumiSize} stroke={mono.green} fill="rgba(61,255,139,0.12)" />
           </View>
         )}
         {nextPic && (
@@ -1760,7 +1761,7 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: '#444',
   },
-  label: { position: 'absolute', width: 120, alignItems: 'center' },
+  labelRight: { position: 'absolute', alignItems: 'flex-start' },
   markerText: {
     fontFamily: fonts.monoBold,
     fontSize: 11,
@@ -1825,7 +1826,6 @@ const styles = StyleSheet.create({
   mapRowOn: { backgroundColor: 'rgba(61,255,139,0.10)', borderWidth: 1, borderColor: 'rgba(61,255,139,0.45)' },
   mapTextOn: { color: mono.green, fontFamily: fonts.monoBold },
   mapInUse: { fontFamily: fonts.monoBold, fontSize: 9, letterSpacing: 1.2, color: mono.green, textTransform: 'uppercase' },
-  rowAddLine: { color: mono.red, fontFamily: fonts.monoBold },
   stepper: { flexDirection: 'row', alignItems: 'center', gap: 6 },
   stepBtn: {
     width: 30,
@@ -1947,7 +1947,7 @@ const styles = StyleSheet.create({
     borderStyle: 'dashed',
   },
   addStopOn: { borderStyle: 'solid', borderColor: '#555' },
-  addStopText: { fontFamily: fonts.mono, fontSize: 12, color: mono.soft },
+  addStopText: { fontFamily: fonts.monoBold, fontSize: 12, color: mono.green }, // like + Add marker and + Add line
   addList: {
     flexGrow: 0,
     maxHeight: 5 * 31,
