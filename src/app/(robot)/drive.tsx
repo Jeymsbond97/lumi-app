@@ -115,7 +115,7 @@ export default function Drive() {
   return (
     <View style={styles.root}>
       <View style={StyleSheet.absoluteFill} pointerEvents="none">
-        <CameraFeed key={`big-${big}`} name={big} baseUrl={connection.baseUrl} width={width} height={height} active={active} label={text} bare frameMs={BIG_FRAME_MS} />
+        <CameraFeed key={`big-${big}`} name={big} baseUrl={connection.baseUrl} width={width} height={height} active={active} label={text} bare hd frameMs={BIG_FRAME_MS} />
       </View>
 
       <Pressable

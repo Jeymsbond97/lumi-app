@@ -22,6 +22,9 @@ export const STALE_S = 5;
 
 /** The newest picture; `n` makes every address new so no cache answers in place of the robot. */
 export const latestUrl = (baseUrl: string, name: CameraName, n: number) => `${baseUrl}/camera/${name}/latest.jpg?n=${n}`;
+/** The newest picture at the camera's own size (1280 x 720) with the person boxes: for a picture that fills the screen
+ *  (Drive), where the 640 px one looks blurred. An older robot API has none (404): latestUrl then. */
+export const hdUrl = (baseUrl: string, name: CameraName, n: number) => `${baseUrl}/camera/${name}/hd.jpg?n=${n}`;
 export const infoUrl = (baseUrl: string, name: CameraName) => `${baseUrl}/camera/${name}/info`;
 
 export interface CameraInfo {

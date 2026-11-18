@@ -1,8 +1,21 @@
 // One camera's live picture (lib/camera): the newest picture asked for again and again while `active`, two pictures
 // taking turns so the shown one never blanks while the next is on its way. Used by Home's camera panel and by Drive.
+// Paused (another screen, the app in the background), the last picture is dropped: coming back shows WAITING until a
+// new one has come, never minutes-old pictures (owner, 2026-11-18).
 import { useEffect, useRef, useState } from 'react';
 import { Image, StyleSheet, Text, View } from 'react-native';
-import { cameraLive, FRAME_MS, FRAME_TIMEOUT_MS, INFO_MS, infoUrl, latestUrl, RETRY_MS, type CameraInfo, type CameraName } from '../lib/camera';
+import {
+  cameraLive,
+  FRAME_MS,
+  FRAME_TIMEOUT_MS,
+  hdUrl,
+  INFO_MS,
+  infoUrl,
+  latestUrl,
+  RETRY_MS,
+  type CameraInfo,
+  type CameraName,
+} from '../lib/camera';
 import { useI18n, type TextKey } from '../lib/i18n';
 import { fonts, mono } from './theme';
 
@@ -25,6 +38,7 @@ export function CameraFeed({
   label,
   bare = false,
   frameMs = FRAME_MS,
+  hd = false,
 }: {
   name: CameraName;
   baseUrl: string;
@@ -36,6 +50,8 @@ export function CameraFeed({
   bare?: boolean;
   /** At most one new picture this often. */
   frameMs?: number;
+  /** The camera's own size (1280 x 720) instead of 640 px: for a picture that fills the screen. */
+  hd?: boolean;
 }) {
   const { t } = useI18n();
   const [uris, setUris] = useState<[string | null, string | null]>([null, null]);
@@ -53,6 +69,8 @@ export function CameraFeed({
     let pending: string | null = null;
     let askedAt = 0;
     let fails = 0;
+    let big = hd; // falls back to the 640 px picture when the robot has no hd.jpg yet
+    let bigSeen = false;
     let next: ReturnType<typeof setTimeout> | undefined;
     let watchdog: ReturnType<typeof setTimeout> | undefined;
 
@@ -64,7 +82,7 @@ export function CameraFeed({
     const ask = () => {
       if (!on) return;
       const slot: Slot = shown === 0 ? 1 : 0;
-      const uri = latestUrl(baseUrl, name, nextNumber());
+      const uri = (big ? hdUrl : latestUrl)(baseUrl, name, nextNumber());
       pending = uri;
       askedAt = Date.now();
       setUris((u) => (slot === 0 ? [uri, u[1]] : [u[0], uri]));
@@ -75,6 +93,10 @@ export function CameraFeed({
       if (!on || uri !== pending) return;
       clearTimeout(watchdog);
       pending = null;
+      if (big && !bigSeen) {
+        big = false;
+        return later(ask, 0);
+      }
       fails += 1;
       if (fails >= FAILS_SHOWN) setFailed(true);
       later(ask, RETRY_MS);
@@ -84,6 +106,7 @@ export function CameraFeed({
       clearTimeout(watchdog);
       pending = null;
       fails = 0;
+      if (big) bigSeen = true;
       shown = slot;
       shownSlot.current = slot;
       setFailed(false);
@@ -115,8 +138,12 @@ export function CameraFeed({
       clearTimeout(next);
       clearTimeout(watchdog);
       clearInterval(infoTimer);
+      // the last picture would show again on coming back, old by then: drop it
+      shownSlot.current = null;
+      setFront(null);
+      setUris([null, null]);
     };
-  }, [active, baseUrl, name, frameMs]);
+  }, [active, baseUrl, name, frameMs, hd]);
 
   const showing = front !== null && !failed && live;
   const quiet = failed || !live ? t('cameraNoPicture') : front === null ? t('cameraWaiting') : null;
