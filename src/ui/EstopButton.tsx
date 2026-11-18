@@ -1,24 +1,26 @@
 // E-STOP, right of STOP: a pause for a drive. Pressed, the base halts where it is (the base's soft E-stop) and the drive
 // waits; pressed again (RESUME), the same drive or route goes on from there. STOP still cancels everything.
 // It shows on the Map always and on every other screen while Lumi drives or is held, so a held Lumi can always be
-// released. While the red button on Lumi is pressed only a hand on the robot releases it; E-STOP says so.
-import { useEffect, useRef, useState } from 'react';
+// released. While the red button on Lumi is pressed only a hand on the robot releases it: E-STOP turns dark red and
+// a tap only buzzes. No words pop up over it (owner, 2026-11-18); the button's own look says held or not.
+import { useEffect, useState } from 'react';
 import { Pressable, StyleSheet, Text, useWindowDimensions, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { usePathname } from 'expo-router';
 import * as Haptics from 'expo-haptics';
-import Animated, { FadeIn, FadeOut, useAnimatedStyle, useSharedValue, withRepeat, withTiming } from 'react-native-reanimated';
+import Animated, { useAnimatedStyle, useSharedValue, withRepeat, withTiming } from 'react-native-reanimated';
 import Svg, { Path, Rect } from 'react-native-svg';
-import { NeedsUpdateError, setEstop } from '../lib/api';
+import { setEstop } from '../lib/api';
 import { estopLook, estopShown } from '../lib/baseInfo';
-import { useI18n, type TextKey } from '../lib/i18n';
+import { useI18n } from '../lib/i18n';
 import { useRobot } from '../lib/robot';
 import { stopSize } from './StopButton';
 import { clamp, fonts, mono } from './theme';
 
-const NOTE_MS = 3000;
 const WANT_MS = 4000;
 const PULSE_MS = 900;
+// room between STOP (with its glow ring) and E-STOP, so a thumb does not hit both (owner, 2026-11-18)
+const GAP = 34;
 
 export function EstopButton() {
   const { t } = useI18n();
@@ -27,8 +29,6 @@ export function EstopButton() {
   const { height: h } = useWindowDimensions();
   const inset = useSafeAreaInsets();
   const [want, setWant] = useState<{ on: boolean } | null>(null);
-  const [note, setNote] = useState<{ key: TextKey; bad?: boolean } | null>(null);
-  const noteTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
   const base = status?.base ?? null;
 
   // what was pressed shows until the base says the same, or for WANT_MS at most: then the base's own state shows
@@ -37,7 +37,6 @@ export function EstopButton() {
     const id = setTimeout(() => setWant(null), WANT_MS);
     return () => clearTimeout(id);
   }, [want]);
-  useEffect(() => () => clearTimeout(noteTimer.current), []);
   const pending = want && base?.softEstop !== want.on ? want.on : null;
 
   const look = estopLook(base, pending);
@@ -47,46 +46,32 @@ export function EstopButton() {
   }, [look, pulse]);
   const pulseStyle = useAnimatedStyle(() => ({ opacity: pulse.value }));
 
-  const show = (key: TextKey, bad = false) => {
-    setNote({ key, bad });
-    clearTimeout(noteTimer.current);
-    noteTimer.current = setTimeout(() => setNote(null), NOTE_MS);
-  };
-
   if (!estopShown(path === '/map', base) && !want) return null;
 
   const onPress = () => {
     if (look === 'hard') {
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning).catch(() => {});
-      return show('estopHard', true);
+      return;
     }
     const on = look !== 'held';
     Haptics.impactAsync(on ? Haptics.ImpactFeedbackStyle.Heavy : Haptics.ImpactFeedbackStyle.Light).catch(() => {});
     setWant({ on });
-    setEstop(connection.baseUrl, on).then(
-      () => show(on ? 'estopHeld' : 'estopResumed'),
-      (e) => {
-        setWant(null);
-        Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error).catch(() => {});
-        show(e instanceof NeedsUpdateError ? 'needsUpdate' : 'noAnswer', true);
-      },
-    );
+    setEstop(connection.baseUrl, on).catch(() => {
+      setWant(null);
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error).catch(() => {});
+    });
   };
 
   const stop = stopSize(h);
   const size = clamp(44, 0.5 * stop, 60);
   const held = look === 'held';
-  const color = look === 'hard' ? mono.red : held ? '#000' : mono.yellow;
+  // red like STOP (owner, 2026-11-18): outlined while ready, filled while held, dark red while the red button on Lumi holds it
+  const color = held || look === 'hard' ? mono.text : mono.red;
   return (
     <View
-      style={[styles.root, { left: 24 + inset.left + stop + 14, bottom: 18 + inset.bottom + (stop - size) / 2 }]}
+      style={[styles.root, { left: 24 + inset.left + stop + GAP, bottom: 18 + inset.bottom + (stop - size) / 2 }]}
       pointerEvents="box-none"
     >
-      {note && (
-        <Animated.View entering={FadeIn.duration(120)} exiting={FadeOut.duration(200)} style={styles.note}>
-          <Text style={[styles.noteText, note.bad && styles.noteBad]}>{t(note.key)}</Text>
-        </Animated.View>
-      )}
       <Animated.View style={held ? pulseStyle : undefined}>
         <Pressable
           onPress={onPress}
@@ -126,22 +111,11 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     gap: 6,
     borderWidth: 2,
-    borderColor: mono.yellow,
+    borderColor: mono.red,
     backgroundColor: 'rgba(8,8,8,0.92)',
   },
-  held: { backgroundColor: mono.yellow, borderColor: mono.yellow },
-  hard: { borderColor: mono.red },
+  held: { backgroundColor: mono.red, borderColor: mono.red },
+  hard: { backgroundColor: '#5c0b0b', borderColor: mono.red },
   pressed: { transform: [{ scale: 0.95 }] },
   label: { fontFamily: fonts.monoBold, letterSpacing: 1, textTransform: 'uppercase' },
-  note: {
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    borderRadius: 999,
-    backgroundColor: 'rgba(0,0,0,0.85)',
-    borderWidth: 1,
-    borderColor: mono.dim,
-    maxWidth: 360,
-  },
-  noteText: { fontFamily: fonts.mono, fontSize: 13, color: mono.text },
-  noteBad: { color: mono.yellow },
 });

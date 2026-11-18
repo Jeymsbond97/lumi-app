@@ -71,17 +71,18 @@ the sensor lists may stay at "No readings" on this base.
 
 ## E-STOP
 
-E-STOP sits right of STOP (`src/ui/EstopButton.tsx`, in the shared layout): on the Map always, on every other screen
+E-STOP sits right of STOP, clear of its glow ring (`src/ui/EstopButton.tsx`, in the shared layout): on the Map always, on every other screen
 while Lumi drives or is held, so a held Lumi can always be released from wherever the app is.
 
-- **E-STOP** (yellow ring, a pause sign): the base's soft E-stop on (`POST /agv/estop {on: true}`, base
+- **E-STOP** (red ring, a pause sign): the base's soft E-stop on (`POST /agv/estop {on: true}`, base
   `/api/estop?flag=true`). The base halts where it is and keeps the drive (lumi-wave `docs/private/AGV_ON_OUR_ROBOT.md`, from the
   base's page: "soft E-stop only pauses it, `/api/move/cancel` ends it"). Still to check on the robot: that
   `move_status` stays `running` meanwhile (else lumi-wave's route runner ends the route).
   Its motors are free meanwhile, so Lumi can be pushed by hand.
-- **RESUME** (yellow, slowly blinking): soft E-stop off (`{on: false}`): the same drive goes on from there, and so the
+- **RESUME** (filled red, slowly blinking): soft E-stop off (`{on: false}`): the same drive goes on from there, and so the
   route (lumi-wave's route runner waits on `move_status`) or the task that drives it.
-- The red button on Lumi pressed: E-STOP turns red and says to release the button on Lumi (nothing else releases it).
+- The red button on Lumi pressed: E-STOP turns dark red and a tap only buzzes (only a hand on Lumi releases it).
+- No words pop up when E-STOP is pressed; the button's look says it.
 - **STOP** stays as it was: it cancels the drive, the route, the arm, the task and the assistant. It does not release
   E-STOP; a held base keeps E-STOP lit until RESUME.
 

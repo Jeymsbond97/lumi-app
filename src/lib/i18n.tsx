@@ -448,9 +448,6 @@ const en = {
   estopHardOn: 'Button on Lumi',
   estop: 'E-STOP',
   estopResume: 'Resume',
-  estopHeld: 'Lumi is held. Resume goes on with the drive',
-  estopResumed: 'Going on',
-  estopHard: 'Release the E-stop button on Lumi',
 };
 
 export type TextKey = keyof typeof en;
@@ -884,9 +881,6 @@ const ko: Record<TextKey, string> = {
   estopHardOn: 'Lumi의 버튼',
   estop: 'E-STOP',
   estopResume: '계속',
-  estopHeld: 'Lumi가 멈췄어요. 계속을 누르면 주행을 이어 가요',
-  estopResumed: '주행을 이어 가요',
-  estopHard: 'Lumi의 비상 정지 버튼을 풀어 주세요',
 };
 
 const STRINGS: Record<Lang, Record<TextKey, string>> = { en, ko };
