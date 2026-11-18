@@ -5,9 +5,10 @@ tablets. It works with the robot API on the robot's Jetson Thor.
 
 ## Demo
 
-[![Lumi App demo video](docs/media/home.png)](docs/media/lumi-app-demo.mp4)
+![Lumi App demo](docs/media/lumi-app-demo.gif)
 
-Click the picture to watch the demo video ([docs/media/lumi-app-demo.mp4](docs/media/lumi-app-demo.mp4), about 2 minutes).
+The preview above plays at 3x speed. Full video at normal speed:
+[docs/media/lumi-app-demo.mp4](docs/media/lumi-app-demo.mp4) (about 2 minutes).
 
 ## Screens
 
