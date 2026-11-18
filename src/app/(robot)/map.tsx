@@ -3,7 +3,7 @@
 // a small bar at the bottom for what is picked (a marker or a tapped point): SAVE and GO, or SET POSITION.
 // MAPPING makes a new map: a name, then the growing map with Lumi on it, the joystick, SAVE or STOP (docs/MAP.md).
 // VIEW and BASE are the base page's top bar (follow, laser, trail, planned path; state, sensors): src/ui/MapPanels.
-// Settings come later (PLAN.md "Map section").
+// SETTINGS: four of the base page's configuration settings (src/ui/BaseSettingsList.tsx).
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import {
   Image,
@@ -66,6 +66,7 @@ import { useI18n, type TextKey } from '../../lib/i18n';
 import { useRobot } from '../../lib/robot';
 import { ConfirmDialog, type ConfirmRequest } from '../../ui/ConfirmDialog';
 import { Joystick } from '../../ui/Joystick';
+import { BaseSettingsList } from '../../ui/BaseSettingsList';
 import { BaseList, MapLayers, ViewList, type Layer } from '../../ui/MapPanels';
 import { MarkerDialog } from '../../ui/MarkerDialog';
 import { NameDialog } from '../../ui/NameDialog';
@@ -92,7 +93,7 @@ const PLAN_EVERY_MS = 1000; // VIEW planned path on: the base's path while it dr
 const TRAIL_EVERY_MS = 1000; // the trail takes Lumi's pose this often (the robot is asked once a second)
 
 type Item = 'control' | 'markers' | 'lines' | 'route' | 'position' | 'mapping' | 'maps' | 'view' | 'base' | 'settings';
-type Menu = 'markers' | 'lines' | 'maps' | 'route' | 'view' | 'base';
+type Menu = 'markers' | 'lines' | 'maps' | 'route' | 'view' | 'base' | 'settings';
 const ITEMS: { key: Item; label: TextKey; list?: boolean; soon?: boolean }[] = [
   { key: 'control', label: 'mapControl' },
   { key: 'markers', label: 'mapMarkers', list: true },
@@ -102,7 +103,7 @@ const ITEMS: { key: Item; label: TextKey; list?: boolean; soon?: boolean }[] = [
   { key: 'maps', label: 'mapMaps', list: true },
   { key: 'view', label: 'mapView', list: true },
   { key: 'base', label: 'mapBase', list: true },
-  { key: 'settings', label: 'mapSettings', soon: true },
+  { key: 'settings', label: 'mapSettings', list: true },
 ];
 
 function Icon({ item, color }: { item: Item; color: string }) {
@@ -971,7 +972,7 @@ export default function MapScreen() {
     });
 
   /** While mapping only CONTROL works (and MAPPING shows it is on); the rest needs the base's map. */
-  const offWhileMapping = (key: Item) => mapping && !['control', 'mapping', 'view', 'base'].includes(key);
+  const offWhileMapping = (key: Item) => mapping && !['control', 'mapping', 'view', 'base', 'settings'].includes(key);
   const press = (item: (typeof ITEMS)[number]) => {
     Haptics.selectionAsync().catch(() => {});
     if (item.soon) return setNote({ key: 'soon' });
@@ -1322,6 +1323,8 @@ export default function MapScreen() {
     );
   } else if (menu === 'base') {
     list = <BaseList base={base} sensors={sensors} needsUpdate={sensorsMissing} />;
+  } else if (menu === 'settings') {
+    list = <BaseSettingsList baseUrl={url} ask={setAsk} note={(key, bad) => setNote({ key, bad })} />;
   }
   // a phone: the navbar shows its icons only (it would not fit with the words); a list then says whose it is
   const compact = navFullW > w - inset.left - inset.right - 24;

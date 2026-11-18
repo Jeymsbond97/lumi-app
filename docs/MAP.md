@@ -144,3 +144,19 @@ then.
 `npx expo start --web` runs the app in a browser for review (the 3D scene in an iframe). The robot API has no CORS,
 so the browser needs a local proxy on 127.0.0.1:8100 and the connection's USB route: `npm run webproxy` (adds the
 CORS headers), then open http://localhost:8081.
+
+## Settings (SETTINGS)
+
+Four of the base page's "configuration" (:9001, bottom bar, `robot-user-configuration.html`), in the navbar's list
+(`src/ui/BaseSettingsList.tsx`): Speed (max, m/s), Turn speed (max, rad/s), Stop margin and Angle margin (how close
+to a marker and how straight on it counts as arrived, m and rad), the base page's `api_params/max_speed_linear`, `api_params/max_speed_angular`,
+`move_base/DWAPlannerROS/xy_goal_tolerance` and `yaw_goal_tolerance`, with its ranges and defaults (speed up to 1.2 m/s on our WT base, as the base page allows by robot type; 0.9 OCEAN, 0.7 others).
+
+- `-` and `+` change a value here (0.1 for the speeds, 0.05 for the arrival ones); a changed value turns green.
+- SAVE asks first, listing what changes, then saves each one (`POST /agv/settings {name, value}`); DEFAULTS puts the
+  base page's defaults back here, still to be saved.
+- lumi-wave `robot/base_settings.py` saves them as the base page does: `POST :9001/api/update_user_parameters` (kept
+  over a restart of the base), then the ROS parameter itself (used at once). `GET /agv/settings` reads them.
+- Max speed is the base's ceiling: Lumi's own drives (lumi-wave sends 0.5 m/s before every move, `tasks/fetch.py`;
+  follow 0.5 m/s) are cut to it, so a lower max speed holds for them too; a higher one never makes them faster.
+  Their turn speed is left as they send it (follow turns at up to 1.0 rad/s): max turn speed is the base's own.

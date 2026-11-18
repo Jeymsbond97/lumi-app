@@ -448,6 +448,17 @@ const en = {
   estopHardOn: 'Button on Lumi',
   estop: 'E-STOP',
   estopResume: 'Resume',
+  // map: SETTINGS (the base page's configuration, docs/MAP.md); short: name and value share one row of the list
+  settingSpeed: 'Speed',
+  settingTurn: 'Turn speed',
+  settingPlace: 'Stop margin',
+  settingAngle: 'Angle margin',
+  settingsSave: 'Save',
+  settingsDefaults: 'Defaults',
+  settingsSaveAsk: 'Save these settings on the base?',
+  settingsSaved: 'Saved on the base',
+  settingsReading: 'Reading the base',
+  settingsNoAnswer: 'The base did not answer',
 };
 
 export type TextKey = keyof typeof en;
@@ -881,6 +892,16 @@ const ko: Record<TextKey, string> = {
   estopHardOn: 'Lumi의 버튼',
   estop: 'E-STOP',
   estopResume: '계속',
+  settingSpeed: '속도',
+  settingTurn: '회전 속도',
+  settingPlace: '도착 오차',
+  settingAngle: '각도 오차',
+  settingsSave: '저장',
+  settingsDefaults: '기본값',
+  settingsSaveAsk: '이 설정을 베이스에 저장할까요?',
+  settingsSaved: '베이스에 저장했어요',
+  settingsReading: '베이스에서 읽는 중',
+  settingsNoAnswer: '베이스가 응답하지 않아요',
 };
 
 const STRINGS: Record<Lang, Record<TextKey, string>> = { en, ko };

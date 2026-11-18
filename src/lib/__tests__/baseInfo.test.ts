@@ -1,5 +1,8 @@
 import {
   addToTrail,
+  settingText,
+  stepSetting,
+  toBaseSettings,
   baseText,
   driving,
   estopLook,
@@ -189,5 +192,38 @@ describe('centreOn', () => {
     const o = centreOn(100, 50, 2, 800, 400);
     expect(o.x + 100 * 2).toBe(400);
     expect(o.y + 50 * 2).toBe(200);
+  });
+});
+
+describe('base settings', () => {
+  const raw = {
+    settings: [
+      { name: 'theta_tolerance', value: 0.2, min: 0.05, max: 1, step: 0.01, default: 0.2 },
+      { name: 'max_speed_linear', value: 0.7, min: 0.1, max: 0.7, step: 0.1, default: 0.7 },
+      { name: 'unknown', value: 1, min: 0, max: 2, step: 1, default: 1 },
+      { name: 'pose_tolerance', value: null, min: 0.05, max: 0.5, step: 0.01, default: 0.3 },
+      { name: 'max_speed_angular', min: 0.1, max: 3.5 },
+    ],
+  };
+
+  it('keeps the four known ones in order, a missing value as null, broken rows out', () => {
+    const s = toBaseSettings(raw);
+    expect(s.map((x) => x.name)).toEqual(['max_speed_linear', 'pose_tolerance', 'theta_tolerance']);
+    expect(s[1]).toEqual({ name: 'pose_tolerance', value: null, min: 0.05, max: 0.5, def: 0.3 });
+    expect(toBaseSettings({})).toEqual([]);
+  });
+
+  it('steps within the range', () => {
+    const [speed, place] = toBaseSettings(raw);
+    expect(stepSetting(speed, 0.7, 1)).toBe(0.7);
+    expect(stepSetting(speed, 0.7, -1)).toBe(0.6);
+    expect(stepSetting(speed, 0.1, -1)).toBe(0.1);
+    expect(stepSetting(place, 0.3, 1)).toBe(0.35);
+    expect(stepSetting(place, 0.05, -1)).toBe(0.05);
+  });
+
+  it('writes value and unit', () => {
+    expect(settingText('max_speed_linear', 0.5)).toBe('0.50 m/s');
+    expect(settingText('theta_tolerance', 0.2)).toBe('0.20 rad');
   });
 });

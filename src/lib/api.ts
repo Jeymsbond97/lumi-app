@@ -1,7 +1,18 @@
 import { fetchWithTimeout } from './connection';
 import type { TextKey } from './i18n';
 import type { JogCommand } from './jog';
-import { toBaseState, toPlan, toSensors, type BaseState, type RawBase, type RawSensors, type Sensors } from './baseInfo';
+import {
+  toBaseSettings,
+  toBaseState,
+  toPlan,
+  toSensors,
+  type BaseSetting,
+  type BaseState,
+  type RawBase,
+  type RawSensors,
+  type Sensors,
+  type SettingName,
+} from './baseInfo';
 import { toMapInfo, type MapInfo } from './mapGeom';
 import { toScanPicture, toScanState, type ScanPicture, type ScanState } from './mapping';
 import { toRouteProgress, type RouteProgress } from './route';
@@ -371,6 +382,13 @@ export async function getPlan(baseUrl: string, timeoutMs = 4000): Promise<{ x: n
 }
 /** E-STOP: on, the base halts where it is and its drive waits; off, the same drive goes on (POST /agv/estop). */
 export const setEstop = (baseUrl: string, on: boolean) => orUpdate(post(baseUrl, '/agv/estop', { on }, 4000));
+/** Four of the base page's configuration settings, as the base has them (GET /agv/settings). */
+export async function getBaseSettings(baseUrl: string, timeoutMs = 6000): Promise<BaseSetting[]> {
+  return toBaseSettings(await orUpdate(getJson<{ settings?: unknown }>(baseUrl, '/agv/settings', timeoutMs)));
+}
+/** Save one of them on the base, as its page does (POST /agv/settings). */
+export const saveBaseSetting = (baseUrl: string, name: SettingName, value: number) =>
+  orUpdate(post(baseUrl, '/agv/settings', { name, value }, 6000));
 
 // ---------- hold-to-move (/jog) ----------
 /** The robot refuses hand control while a task runs (HTTP 409). */

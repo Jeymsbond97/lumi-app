@@ -193,3 +193,55 @@ export function addToTrail(trail: Trail, p: { x: number; y: number }): Trail {
 
 /** Points of the trail in all. */
 export const trailLength = (t: Trail): number => t.reduce((n, s) => n + s.length, 0);
+
+// ---------- the base's settings (lumi-wave GET /agv/settings: four of the base page's "configuration") ----------
+export const SETTING_NAMES = ['max_speed_linear', 'max_speed_angular', 'pose_tolerance', 'theta_tolerance'] as const;
+export type SettingName = (typeof SETTING_NAMES)[number];
+
+export interface BaseSetting {
+  name: SettingName;
+  /** What the base has now; null when it did not say. */
+  value: number | null;
+  min: number;
+  max: number;
+  /** The base page's default. */
+  def: number;
+}
+
+export const SETTING_TEXT: Record<SettingName, TextKey> = {
+  max_speed_linear: 'settingSpeed',
+  max_speed_angular: 'settingTurn',
+  pose_tolerance: 'settingPlace',
+  theta_tolerance: 'settingAngle',
+};
+export const SETTING_UNIT: Record<SettingName, string> = {
+  max_speed_linear: 'm/s',
+  max_speed_angular: 'rad/s',
+  pose_tolerance: 'm',
+  theta_tolerance: 'rad',
+};
+/** One tap of - or + changes a setting by this much. */
+export const SETTING_STEP: Record<SettingName, number> = {
+  max_speed_linear: 0.1,
+  max_speed_angular: 0.1,
+  pose_tolerance: 0.05,
+  theta_tolerance: 0.05,
+};
+
+/** The settings the robot sent, in SETTING_NAMES order; unknown names and broken rows are left out. */
+export function toBaseSettings(raw: { settings?: unknown }): BaseSetting[] {
+  const rows = Array.isArray(raw.settings) ? (raw.settings as Record<string, unknown>[]) : [];
+  return SETTING_NAMES.flatMap((name) => {
+    const r = rows.find((x) => x && x.name === name);
+    if (!r || !fin(r.min) || !fin(r.max) || !fin(r.default)) return [];
+    return [{ name, value: fin(r.value) ? r.value : null, min: r.min, max: r.max, def: r.default }];
+  });
+}
+
+/** `value` moved by `dir` taps of the setting's step, kept in its range (two decimals). */
+export function stepSetting(s: BaseSetting, value: number, dir: 1 | -1): number {
+  const next = Math.round((value + dir * SETTING_STEP[s.name]) * 100) / 100;
+  return Math.min(s.max, Math.max(s.min, next));
+}
+
+export const settingText = (name: SettingName, v: number) => `${v.toFixed(2)} ${SETTING_UNIT[name]}`;
