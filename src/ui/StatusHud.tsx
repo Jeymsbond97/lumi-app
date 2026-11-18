@@ -1,11 +1,11 @@
 // On every screen after the loading screen (style D): the name in dot matrix top left (moving or base offline under it),
 // top centre the body and arm power (tapping the body enables or disables it; tapping the arm powers it on, enables,
-// disables or powers it off; each asks first in ConfirmDialog), and on the right under the battery
-// head, waist and lift (only while the head and lift controller answers; no empty placeholders).
+// disables or powers it off; each asks first in ConfirmDialog). Head, waist and lift are not shown here (owner,
+// 2026-11-18): Drive's BODY page shows them.
 // Battery: BatteryBadge, top right.
 import { ActivityIndicator, Pressable, StyleSheet, Text, useWindowDimensions, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { ARM_TEXT, bodyPoseKnown, type ArmState } from '../lib/api';
+import { ARM_TEXT, type ArmState } from '../lib/api';
 import type { TextKey } from '../lib/i18n';
 import { useI18n } from '../lib/i18n';
 import { useRobot } from '../lib/robot';
@@ -28,7 +28,7 @@ const STATE_DOT: Partial<Record<TextKey, string>> = {
 };
 
 
-export function StatusHud({ hideReadings = false }: { hideReadings?: boolean }) {
+export function StatusHud() {
   const { t } = useI18n();
   const { status } = useRobot();
   const { height: h } = useWindowDimensions();
@@ -36,7 +36,6 @@ export function StatusHud({ hideReadings = false }: { hideReadings?: boolean }) 
   const { arm, body: bodyNow, busyArm, busyBody, switchArm, switchBody, note, ask, closeAsk } = usePowerSwitch();
   const nameSize = clamp(26, 0.07 * h, 56);
   const small = clamp(11, 0.019 * h, 15);
-  const body = status?.body ?? null;
 
   return (
     <>
@@ -79,14 +78,6 @@ export function StatusHud({ hideReadings = false }: { hideReadings?: boolean }) 
         </View>
       )}
 
-      {bodyPoseKnown(body) && !hideReadings && (
-        <View style={[styles.readings, { right: 24 + inset.right, top: 14 + inset.top + 52 }]} pointerEvents="none">
-          <Reading label={t('head')} value={`${Math.round(body.headYawDeg)}°`} size={small} />
-          <Reading label={t('waist')} value={`${Math.round(body.waistDeg)}°`} size={small} />
-          <Reading label={t('lift')} value={`${Math.round(body.liftMm)} mm`} size={small} />
-        </View>
-      )}
-
       <ConfirmDialog request={ask} onClose={closeAsk} />
     </>
   );
@@ -114,15 +105,6 @@ export function Chip({ on, colour, text, size, busy }: { on: boolean; colour: st
   );
 }
 
-function Reading({ label, value, size }: { label: string; value: string; size: number }) {
-  return (
-    <View style={[styles.row, { gap: size * 0.6 }]}>
-      <Text style={[styles.label, { fontSize: size }]}>{label}</Text>
-      <Text style={[styles.value, { fontSize: size }]}>{value}</Text>
-    </View>
-  );
-}
-
 // keeps small words readable over the bright planet and skyline behind them
 const shadow = { textShadowColor: 'rgba(0,0,0,0.9)', textShadowRadius: 6 };
 
@@ -132,7 +114,6 @@ const styles = StyleSheet.create({
   row: { flexDirection: 'row', alignItems: 'center' },
   label: { fontFamily: fonts.mono, color: mono.soft, letterSpacing: 1, textTransform: 'uppercase', ...shadow },
   labelOn: { color: mono.text },
-  value: { fontFamily: fonts.monoBold, color: mono.text, ...shadow },
   dot: { borderRadius: 99 },
   dotOff: { borderWidth: 1.5, borderColor: mono.soft },
   chipRow: { position: 'absolute', left: 0, right: 0, alignItems: 'center', gap: 8 },
@@ -156,5 +137,4 @@ const styles = StyleSheet.create({
     backgroundColor: 'rgba(0,0,0,0.85)',
     overflow: 'hidden',
   },
-  readings: { position: 'absolute', alignItems: 'flex-end', gap: 6 },
 });

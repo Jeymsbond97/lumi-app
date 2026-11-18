@@ -21,7 +21,7 @@ import { colors } from '../../ui/theme';
 function Controls() {
   const { covering } = useLanding();
   const path = usePathname();
-  const camera = useCameraOpen(); // the camera panel covers where the readings and the task card sit
+  const camera = useCameraOpen(); // the camera panel covers where the task card sits
   if (covering) return null;
   return (
     <Animated.View style={StyleSheet.absoluteFill} entering={FadeIn.duration(450)} pointerEvents="box-none">
@@ -32,7 +32,7 @@ function Controls() {
       {path !== '/drive' && <CameraPanel />}
       <Dock />
       {/* the status bar's confirm dialog covers everything here but STOP */}
-      <StatusHud hideReadings={camera || path === '/drive' /* Drive's BODY page shows them */} />
+      <StatusHud />
       <StopButton />
       <EstopButton />
     </Animated.View>
