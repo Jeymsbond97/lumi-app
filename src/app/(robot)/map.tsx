@@ -2,6 +2,7 @@
 // markers; a floating navbar on top (CONTROL, MARKERS, ROUTE, POSITION, MAPPING, MAPS, SETTINGS) with drop-down lists;
 // a small bar at the bottom for what is picked (a marker or a tapped point): SAVE and GO, or SET POSITION.
 // MAPPING makes a new map: a name, then the growing map with Lumi on it, the joystick, SAVE or STOP (docs/MAP.md).
+// VIEW and BASE are the base page's top bar (follow, laser, trail, planned path; state, sensors): src/ui/MapPanels.
 // Settings come later (PLAN.md "Map section").
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import {
@@ -24,13 +25,16 @@ import {
   deleteLine,
   deleteMarker,
   getMapInfo,
+  getPlan,
   getRoute,
+  getSensors,
   getScan,
   getScanPicture,
   getScanState,
   goMarker,
   goPoint,
   mapImageUrl,
+  NeedsUpdateError,
   saveLine,
   saveMarker,
   saveScan,
@@ -41,7 +45,9 @@ import {
 } from '../../lib/api';
 import { keepPicture, progressText, saveEarly, validNewMapName, type ScanPicture, type ScanState } from '../../lib/mapping';
 import { addStop, keepKnown, PAUSE_MAX_S, removeStopAt, ROUNDS_MAX, stopNumbers, type RouteProgress } from '../../lib/route';
+import { addToTrail, driving, trailLength, type Sensors, type Trail } from '../../lib/baseInfo';
 import {
+  centreOn,
   clampOffset,
   clampZoom,
   fitMap,
@@ -60,6 +66,7 @@ import { useI18n, type TextKey } from '../../lib/i18n';
 import { useRobot } from '../../lib/robot';
 import { ConfirmDialog, type ConfirmRequest } from '../../ui/ConfirmDialog';
 import { Joystick } from '../../ui/Joystick';
+import { BaseList, MapLayers, ViewList, type Layer } from '../../ui/MapPanels';
 import { MarkerDialog } from '../../ui/MarkerDialog';
 import { NameDialog } from '../../ui/NameDialog';
 import { colors, fonts, mono } from '../../ui/theme';
@@ -80,9 +87,12 @@ const ROUTE_EVERY_MS = 1000; // a route's progress while the API drives it
 const MAPPING_STATE_MS = 1000; // making a new map: Lumi's pose and the optimizing progress
 const MAPPING_PICTURE_MS = 1500; // and the growing map (the base draws it about once a second)
 const SAVED_RELOAD_MS = 3000; // the new map shows in MAPS a moment after it is saved
+const SENSORS_EVERY_MS = 1000; // BASE open: speed, ultrasonic and infrared
+const PLAN_EVERY_MS = 1000; // VIEW planned path on: the base's path while it drives
+const TRAIL_EVERY_MS = 1000; // the trail takes Lumi's pose this often (the robot is asked once a second)
 
-type Item = 'control' | 'markers' | 'lines' | 'route' | 'position' | 'mapping' | 'maps' | 'settings';
-type Menu = 'markers' | 'lines' | 'maps' | 'route';
+type Item = 'control' | 'markers' | 'lines' | 'route' | 'position' | 'mapping' | 'maps' | 'view' | 'base' | 'settings';
+type Menu = 'markers' | 'lines' | 'maps' | 'route' | 'view' | 'base';
 const ITEMS: { key: Item; label: TextKey; list?: boolean; soon?: boolean }[] = [
   { key: 'control', label: 'mapControl' },
   { key: 'markers', label: 'mapMarkers', list: true },
@@ -90,6 +100,8 @@ const ITEMS: { key: Item; label: TextKey; list?: boolean; soon?: boolean }[] = [
   { key: 'position', label: 'mapPosition' },
   { key: 'mapping', label: 'mapMapping' },
   { key: 'maps', label: 'mapMaps', list: true },
+  { key: 'view', label: 'mapView', list: true },
+  { key: 'base', label: 'mapBase', list: true },
   { key: 'settings', label: 'mapSettings', soon: true },
 ];
 
@@ -129,6 +141,13 @@ function Icon({ item, color }: { item: Item; color: string }) {
           <Path d="M3 10h18" {...p} />
         </>
       )}
+      {item === 'view' && (
+        <>
+          <Path d="M2 12s3.6-7 10-7 10 7 10 7-3.6 7-10 7S2 12 2 12z" {...p} />
+          <Circle cx={12} cy={12} r={3} {...p} />
+        </>
+      )}
+      {item === 'base' && <Path d="M3 12h4l2.5-6 5 12 2.5-6h4" {...p} />}
       {item === 'settings' && (
         <>
           <Circle cx={12} cy={12} r={3} {...p} />
@@ -318,6 +337,13 @@ export default function MapScreen() {
   const [editLine, setEditLine] = useState<string | null>(null); // the line in the edit dialog
   const [editing, setEditing] = useState<MapMarker | null>(null); // the marker in the edit dialog
   const [note, setNote] = useState<{ key: TextKey; bad?: boolean } | null>(null);
+  // VIEW: what is drawn on the map besides it; BASE: the base's sensors while its list is open
+  const [layers, setLayers] = useState<Record<Layer, boolean>>({ follow: false, laser: false, trail: false, plan: false });
+  const [plan, setPlan] = useState<{ x: number; y: number }[] | null>(null);
+  const [sensors, setSensors] = useState<Sensors | null>(null);
+  const [sensorsMissing, setSensorsMissing] = useState(false); // the robot's API has no /agv/sensors yet
+  const [navFullW, setNavFullW] = useState(0); // the navbar with its words, measured out of sight
+  const base = status?.base ?? null;
 
   const load = useCallback(() => {
     getMapInfo(url).then(
@@ -439,9 +465,11 @@ export default function MapScreen() {
     };
   }, [runByApi, url]);
 
-  // setting the position: the lidar once a second, drawn at Lumi's place now (red) and at the new one (purple)
+  // setting the position: the lidar once a second, drawn at Lumi's place now (red) and at the new one (purple);
+  // VIEW laser: the same, drawn at Lumi's place
+  const lidarOn = positioning || layers.laser;
   useEffect(() => {
-    if (!positioning) return;
+    if (!lidarOn) return;
     let alive = true;
     const read = () =>
       getScan(url).then(
@@ -454,7 +482,90 @@ export default function MapScreen() {
       alive = false;
       clearInterval(id);
     };
-  }, [positioning, url]);
+  }, [lidarOn, url]);
+
+  // the trail: where Lumi drove on this map, kept from the pose the robot gives each second (a new map starts anew)
+  const trailKey = scanning ? `scan:${scanning.name}` : mapInfo ? `${mapInfo.name}/${mapInfo.floor}` : '';
+  const livePose = scanning ? scanning.pose : (status?.pose ?? null);
+  const [trail, setTrail] = useState<{ key: string; trail: Trail }>({ key: '', trail: [] });
+  const trailFrom = useRef<{ key: string; pose: { x: number; y: number } | null }>({ key: '', pose: null });
+  useEffect(() => {
+    trailFrom.current = { key: trailKey, pose: livePose };
+  });
+  useEffect(() => {
+    const id = setInterval(() => {
+      const { key, pose: p } = trailFrom.current;
+      if (!key || !p) return;
+      const at = { x: p.x, y: p.y };
+      setTrail((tr) => {
+        if (tr.key !== key) return { key, trail: addToTrail([], at) };
+        const next = addToTrail(tr.trail, at);
+        return next === tr.trail ? tr : { key, trail: next };
+      });
+    }, TRAIL_EVERY_MS);
+    return () => clearInterval(id);
+  }, []);
+
+  // VIEW planned path: the base's path once a second while it drives
+  const planOn = layers.plan && driving(base) && !mapping;
+  useEffect(() => {
+    if (!planOn) return;
+    let alive = true;
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    const read = () =>
+      getPlan(url)
+        .then(
+          (p) => alive && setPlan(p),
+          (e) => {
+            if (!alive || !(e instanceof NeedsUpdateError)) return;
+            alive = false;
+            setLayers((l) => ({ ...l, plan: false }));
+            setNote({ key: 'needsUpdate', bad: true });
+          },
+        )
+        .finally(() => {
+          if (alive) timer = setTimeout(read, PLAN_EVERY_MS);
+        });
+    read();
+    return () => {
+      alive = false;
+      clearTimeout(timer);
+    };
+  }, [planOn, url]);
+
+  // BASE open: speed, ultrasonic and infrared once a second (one request at a time)
+  const sensorsOn = menu === 'base' && !sensorsMissing;
+  useEffect(() => {
+    if (!sensorsOn) return;
+    let alive = true;
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    const read = () =>
+      getSensors(url)
+        .then(
+          (v) => alive && setSensors(v),
+          (e) => {
+            if (!alive) return;
+            if (e instanceof NeedsUpdateError) {
+              alive = false;
+              setSensorsMissing(true);
+            } else setSensors(null);
+          },
+        )
+        .finally(() => {
+          if (alive) timer = setTimeout(read, SENSORS_EVERY_MS);
+        });
+    read();
+    return () => {
+      alive = false;
+      clearTimeout(timer);
+    };
+  }, [sensorsOn, url]);
+
+  const toggleLayer = (l: Layer) => {
+    Haptics.selectionAsync().catch(() => {});
+    setLayers((v) => ({ ...v, [l]: !v[l] }));
+    if (l === 'laser' && layers.laser && !positioning) setScan(null);
+  };
 
   useEffect(() => {
     if (!note) return;
@@ -465,11 +576,26 @@ export default function MapScreen() {
   const fit = useMemo(() => (info ? fitMap(info.width, info.height, frame.w, frame.h) : null), [info, frame.w, frame.h]);
   const viewKey = info ? `${info.name}/${info.floor}/${frame.w}x${frame.h}` : '';
   const zoom = zv.key === viewKey ? zv.zoom : 1;
-  const offset = (zv.key === viewKey && zv.offset) || {
+  const manualOffset = (zv.key === viewKey && zv.offset) || {
     x: fit?.left ?? 0,
     y: fit?.top ?? 0,
   };
   const scale = (fit?.scale ?? 0) * zoom;
+  // VIEW follow (the base page's track): Lumi stays in the middle of the frame; a drag of the map ends it
+  const following = layers.follow && !positioning && !drawing && !!livePose && !!info && scale > 0;
+  const offset =
+    following && info && livePose
+      ? (() => {
+          const p = worldToPixel(info, livePose.x, livePose.y);
+          return clampOffset(
+            centreOn(p.x, p.y, scale, frame.w, frame.h),
+            info.width * scale,
+            info.height * scale,
+            frame.w,
+            frame.h,
+          );
+        })()
+      : manualOffset;
   const toView = (x: number, y: number) => {
     if (!info) return { x: 0, y: 0 };
     const p = worldToPixel(info, x, y);
@@ -559,7 +685,13 @@ export default function MapScreen() {
       if (created) setDrawing((d) => (d ? (first ? [] : d.slice(0, -1)) : d));
       t.draw = undefined;
     }
+    const endFollow = () => {
+      if (!layers.follow) return;
+      setLayers((l) => ({ ...l, follow: false }));
+      setNote({ key: 'viewFollowOff' });
+    };
     if (two) {
+      endFollow();
       if (!t.d)
         Object.assign(t, {
           d: two.d,
@@ -596,6 +728,7 @@ export default function MapScreen() {
       setAim(headingFromDrag(dx, dy));
       return;
     }
+    endFollow();
     place(t.zoom, { x: t.off.x + dx, y: t.off.y + dy });
   };
   const onRelease = (e: GestureResponderEvent) => {
@@ -838,7 +971,7 @@ export default function MapScreen() {
     });
 
   /** While mapping only CONTROL works (and MAPPING shows it is on); the rest needs the base's map. */
-  const offWhileMapping = (key: Item) => mapping && key !== 'control' && key !== 'mapping';
+  const offWhileMapping = (key: Item) => mapping && !['control', 'mapping', 'view', 'base'].includes(key);
   const press = (item: (typeof ITEMS)[number]) => {
     Haptics.selectionAsync().catch(() => {});
     if (item.soon) return setNote({ key: 'soon' });
@@ -922,7 +1055,10 @@ export default function MapScreen() {
     setAim((a) => (a ?? heading) + d);
   };
 
-  const pose = scanning ? scanning.pose : (status?.pose ?? null); // on the new map while mapping
+  const pose = livePose; // on the new map while mapping
+  const trailNow = trail.key === trailKey ? trail.trail : [];
+  const laserPts =
+    layers.laser && !positioning && scan && pose ? scanToWorld(scan, pose) : null;
   const lumi = pose && info ? toView(pose.x, pose.y) : null;
   const size = info ? footprintPx(info.resolution, scale) : 0; // Lumi's 510 mm base on screen
   const markerSize = Math.max(MARKER_MIN, size * 0.7);
@@ -1175,7 +1311,21 @@ export default function MapScreen() {
         </View>
       );
     });
+  } else if (menu === 'view') {
+    list = (
+      <ViewList
+        on={layers}
+        onToggle={toggleLayer}
+        trailPoints={trailLength(trailNow)}
+        onClearTrail={() => setTrail({ key: trailKey, trail: [] })}
+      />
+    );
+  } else if (menu === 'base') {
+    list = <BaseList base={base} sensors={sensors} needsUpdate={sensorsMissing} />;
   }
+  // a phone: the navbar shows its icons only (it would not fit with the words); a list then says whose it is
+  const compact = navFullW > w - inset.left - inset.right - 24;
+  const menuItem = ITEMS.find((i) => i.key === menu);
 
   return (
     <View style={styles.root}>
@@ -1226,6 +1376,16 @@ export default function MapScreen() {
               />
             ))}
           </Svg>
+        )}
+        {info && scale > 0 && (
+          <MapLayers
+            width={frame.w}
+            height={frame.h}
+            toView={toView}
+            trail={layers.trail ? trailNow : null}
+            plan={planOn ? plan : null}
+            laser={laserPts}
+          />
         )}
         {info?.markers.map((m) => {
           const p = toView(m.x, m.y);
@@ -1460,15 +1620,34 @@ export default function MapScreen() {
                 }}
                 hitSlop={4}
                 accessibilityRole="button"
+                accessibilityLabel={t(item.label)}
                 accessibilityState={{ selected: on, disabled: item.soon || offWhileMapping(item.key) }}
                 style={({ pressed }) => [styles.item, on && styles.itemOn, pressed && styles.pressed]}
               >
                 <Icon item={item.key} color={color} />
-                <Text style={[styles.itemText, { color }]}>{t(item.label)}</Text>
+                {!compact && <Text style={[styles.itemText, { color }]}>{t(item.label)}</Text>}
                 {item.list && <Chevron up={menu === item.key} color={color} size={11} />}
               </Pressable>
             );
           })}
+        </View>
+        {/* the same navbar with its words, out of sight: its width says whether the words fit */}
+        <View style={styles.navMeasure} pointerEvents="none">
+          <View
+            style={styles.nav}
+            onLayout={(e: LayoutChangeEvent) => {
+              const nw = Math.round(e.nativeEvent.layout.width);
+              setNavFullW((v) => (v === nw ? v : nw));
+            }}
+          >
+            {ITEMS.map((item) => (
+              <View key={item.key} style={styles.item}>
+                <Icon item={item.key} color={mono.soft} />
+                <Text style={styles.itemText}>{t(item.label)}</Text>
+                {item.list && <Chevron size={11} />}
+              </View>
+            ))}
+          </View>
         </View>
         {note && <Text style={[styles.note, note.bad && styles.noteBad]}>{t(note.key)}</Text>}
       </View>
@@ -1485,6 +1664,7 @@ export default function MapScreen() {
           ]}
           contentContainerStyle={{ padding: 6 }}
         >
+          {compact && menuItem && <Text style={styles.listTitle}>{t(menuItem.label)}</Text>}
           {list}
         </ScrollView>
       )}
@@ -1773,6 +1953,8 @@ const styles = StyleSheet.create({
   },
   markerTextOn: { color: '#fff', backgroundColor: 'rgba(255,45,45,0.85)' },
   pin: { position: 'absolute', width: PIN_W, height: PIN_H + 5 },
+  // wide enough for any navbar, so the copy inside keeps its own width
+  navMeasure: { position: 'absolute', top: -400, left: 0, width: 4000, flexDirection: 'row', opacity: 0 },
   navWrap: {
     position: 'absolute',
     left: 0,

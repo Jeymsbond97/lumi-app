@@ -119,6 +119,12 @@ export function clampOffset(offset: { x: number; y: number }, w: number, h: numb
   };
 }
 
+/** The picture's top left corner that puts its pixel (px, py), drawn at `scale`, in the middle of a viewW x viewH view. */
+export const centreOn = (px: number, py: number, scale: number, viewW: number, viewH: number) => ({
+  x: viewW / 2 - px * scale,
+  y: viewH / 2 - py * scale,
+});
+
 /** A drag on the picture (screen pixels, y down) as a heading in the map frame (rad, 0 along +x, + counter-clockwise). */
 export const headingFromDrag = (dx: number, dy: number): number => Math.atan2(0 - dy, dx); // 0 - dy: never -0 (atan2(-0, -1) is -pi)
 

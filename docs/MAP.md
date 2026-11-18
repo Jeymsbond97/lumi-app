@@ -6,8 +6,9 @@ while Map is open (Tabs in `src/app/(robot)/_layout.tsx`), so going back does no
 
 ## Layout
 
-- **Navbar** at the top: CONTROL, MARKERS ▾, LINES ▾, POSITION, MAPPING, MAPS ▾, SETTINGS. SETTINGS says
-  "Coming soon" for now.
+- **Navbar** at the top: CONTROL, MARKERS ▾, LINES ▾, POSITION, MAPPING, MAPS ▾, VIEW ▾, BASE ▾, SETTINGS. SETTINGS
+  says "Coming soon" for now. Where the words do not fit (a phone, about 844 px wide) the navbar shows its icons only
+  (the full navbar is measured out of sight); an open list then starts with its item's name.
 - **The frame**: the map sits in a rounded frame between the navbar and the Dock, whatever its size. It starts fitted
   to the frame. **+ / −** (bottom right, outside the frame so a moving finger can't cancel the press) zoom 1.5× about
   the centre, from the whole map up to 8×. Two fingers pinch, one finger drags; a touch that moves less than 8 px is a
@@ -29,7 +30,62 @@ while Map is open (Tabs in `src/app/(robot)/_layout.tsx`), so going back does no
 | Switch maps | MAPS ▾ → a map, confirm; reloads after 15 s; correct the position after | `/map/switch` |
 | Drive by hand | CONTROL shows the joystick | `/jog` |
 | Make a new map | MAPPING: a name, confirm, then drive with the joystick while the map grows; SAVE or STOP (see below) | `/map/scan/*` |
+| See more on the map | VIEW ▾: Follow Lumi, Laser, Trail, Planned path (see below) | `/map/scan`, `/status`, `/agv/plan` |
+| Read the base | BASE ▾: state, target, E-stop, fault, speed, ultrasonic, infrared | `/status` base, `/agv/sensors` |
+| Pause a drive | E-STOP (next to STOP): the base halts where it is; RESUME goes on with the same drive or route | `/agv/estop` |
 | No-go lines | always drawn in red. LINES ▾ → + New line: each tap on the map is a point (UNDO, CLEAR, CANCEL), SAVE (2 points or more) asks a name; a line's name lights it up; ✎ renames (saved anew, old deleted) or deletes | `/map/info` `lines`, `/map/line`, `/map/line/delete` (base `/forbidden_manager/action_service` list_lines, add_lines, delete_lines over rosbridge) |
+
+## VIEW and BASE (the base page's top bar)
+
+The base's own page (:9001, `js/compress/nav2d.min.yunhai.js`) has in its top bar: track, laser, ultrasonic,
+infrared, 4g, position correction, markers, no-go lines, zones, routes, control, measure, global path, particle cloud,
+partial map update, fall prevention, log, other, soft E-stop. The app has the useful ones:
+
+- **VIEW ▾** (switches; they stay as set while the app runs):
+  - **Follow Lumi** (the page's *track*): Lumi stays in the middle of the frame; + / − keep it there; a drag or a
+    pinch of the map ends it ("Follow is off").
+  - **Laser** (the page's *laser*): what the lidar sees now (`/map/scan`, once a second) as red dots at Lumi's pose.
+    While POSITION is open its own red and purple dots show instead.
+  - **Trail**: where Lumi drove on this map. The app keeps it itself from the pose of `/status` (once a second, a
+    point every 5 cm, a new piece after a jump over 1.5 m such as a set position, the last 1500 points); another map
+    (or a new map being made) starts a new trail. *Clear trail* empties it.
+  - **Planned path** (the page's *global path*, topic `/move_base/NavfnROS/plan`): the base's path to its goal, blue
+    and dashed, while it drives (`/agv/plan`, once a second).
+- **BASE ▾** (read only, while it is open): the state (idle, driving, docking, arrived, held by E-STOP, the red
+  button pressed on Lumi), the target marker, E-stop (off, E-STOP, button on Lumi), the base's fault code
+  (`error_code` other than `00000000`), and from `/agv/sensors` once a second: speed and turn, ultrasonic and infrared
+  ranges per sensor (left 1, front, right 1, back, ...; red under 1 m as on the base's page; "Nothing near" when a
+  sensor sees nothing in range).
+
+Without the lumi-wave update below, Planned path says "Needs an update on the robot" and switches itself off, BASE
+shows the state from `/status` and says that speed, ultrasonic and infrared need the update, and E-STOP says so too.
+
+Left out on purpose: **4g** (the page draws the cellular signal recorded at each marker; Lumi runs on the robot
+Wi-Fi), **zones**, **routes (beta)**, **measure**, **particle cloud**, **partial map update**, **fall prevention**,
+**log** and **other** (deployment and service tools, not for a tablet), and the base's **settings** (max speed is
+set before every drive by lumi-wave itself, `agv.max_speed`; a setting here would fight the tasks).
+
+On 2026-11-18 (Lumi on its charger) the ultrasonic and infrared topics (`/water_uavcan_master/rx_in_ultrasonic`,
+`rx_in_ultrasonic_ex`, `rx_in_ir_v2`) sent nothing within 6 s; `/robot_status` (with `velocity`) and `/scan` did. So
+the sensor lists may stay at "No readings" on this base.
+
+## E-STOP
+
+E-STOP sits right of STOP (`src/ui/EstopButton.tsx`, in the shared layout): on the Map always, on every other screen
+while Lumi drives or is held, so a held Lumi can always be released from wherever the app is.
+
+- **E-STOP** (yellow ring, a pause sign): the base's soft E-stop on (`POST /agv/estop {on: true}`, base
+  `/api/estop?flag=true`). The base halts where it is and keeps the drive (lumi-wave `docs/private/AGV_ON_OUR_ROBOT.md`, from the
+  base's page: "soft E-stop only pauses it, `/api/move/cancel` ends it"). Still to check on the robot: that
+  `move_status` stays `running` meanwhile (else lumi-wave's route runner ends the route).
+  Its motors are free meanwhile, so Lumi can be pushed by hand.
+- **RESUME** (yellow, slowly blinking): soft E-stop off (`{on: false}`): the same drive goes on from there, and so the
+  route (lumi-wave's route runner waits on `move_status`) or the task that drives it.
+- The red button on Lumi pressed: E-STOP turns red and says to release the button on Lumi (nothing else releases it).
+- **STOP** stays as it was: it cancels the drive, the route, the arm, the task and the assistant. It does not release
+  E-STOP; a held base keeps E-STOP lit until RESUME.
+
+What was pressed shows at once and until `/status` says the same (4 s at most).
 
 ## Position correction (POSITION)
 
@@ -67,11 +123,20 @@ or a task runs.
 
 - `src/lib/mapGeom.ts`: map info, map ↔ picture coordinates, fit, zoom and pan, drag heading, true size, lidar
   points on the map (tests in `src/lib/__tests__/mapGeom.test.ts`).
-- `src/lib/api.ts`: `getMapInfo`, `mapImageUrl`, `goMarker`, `goPoint`, `saveMarker`, `deleteMarker`, `setPosition`,
+- `src/lib/baseInfo.ts`: the base's state from `/status` (`toBaseState`, `baseText`), E-STOP (`estopLook`,
+  `estopShown`), sensors and planned path replies, the trail (tests in `src/lib/__tests__/baseInfo.test.ts`).
+- `src/ui/MapPanels.tsx`: the VIEW and BASE lists and the layers VIEW draws; `src/ui/EstopButton.tsx`: E-STOP.
+- `src/lib/api.ts`: `getSensors`, `getPlan`, `setEstop` (a 404 is `NeedsUpdateError`), `getMapInfo`, `mapImageUrl`, `goMarker`, `goPoint`, `saveMarker`, `deleteMarker`, `setPosition`,
   `setPositionAtMarker`, `getScan`, `switchMap`, `getScanState`, `getScanPicture`, `startScan`, `saveScan`.
 - `src/lib/mapping.ts`: the new map's state and picture, the name rule, progress (tests in
   `src/lib/__tests__/mapping.test.ts`).
 - `src/ui/NameDialog.tsx`: the name dialog (markers, lines, a new map).
+
+## Needs lumi-wave (Thor)
+
+`GET /agv/sensors`, `GET /agv/plan`, `POST /agv/estop`, and `soft_estop_state` and `hard_estop_state` in `/status`
+base: not in lumi-wave yet (2026-11-18); the app is built against them and says "Needs an update on the robot" until
+then.
 
 ## In a browser
 

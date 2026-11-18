@@ -15,6 +15,15 @@ describe('toStatus', () => {
       armState: 'enabled',
       armSilent: false,
       pose: { x: -1.13, y: 0.004, theta: 0.04 },
+      base: {
+        move: 'idle',
+        running: 'idle',
+        target: '',
+        errorCode: null,
+        softEstop: false,
+        hardEstop: false,
+        paused: false,
+      },
     });
   });
 

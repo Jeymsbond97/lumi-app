@@ -1,6 +1,7 @@
 import { fetchWithTimeout } from './connection';
 import type { TextKey } from './i18n';
 import type { JogCommand } from './jog';
+import { toBaseState, toPlan, toSensors, type BaseState, type RawBase, type RawSensors, type Sensors } from './baseInfo';
 import { toMapInfo, type MapInfo } from './mapGeom';
 import { toScanPicture, toScanState, type ScanPicture, type ScanState } from './mapping';
 import { toRouteProgress, type RouteProgress } from './route';
@@ -11,7 +12,7 @@ interface Failed {
   error?: string;
 }
 interface RawStatus {
-  base?: Failed & {
+  base?: RawBase & {
     power_percent?: number;
     charge_state?: boolean;
     move_status?: string;
@@ -70,6 +71,8 @@ export interface RobotStatus {
   armSilent: boolean;
   /** Where the base is on the current map (m, rad), null when the base does not say. */
   pose: { x: number; y: number; theta: number } | null;
+  /** The drive, E-STOP and fault state; null when the base does not answer (optional: older test data has none). */
+  base?: BaseState | null;
 }
 
 const num = (v: unknown): v is number => typeof v === 'number' && Number.isFinite(v);
@@ -100,6 +103,7 @@ export function toStatus(raw: RawStatus): RobotStatus {
       !base.error && num(base.current_pose?.x) && num(base.current_pose?.y)
         ? { x: base.current_pose.x, y: base.current_pose.y, theta: num(base.current_pose.theta) ? base.current_pose.theta : 0 }
         : null,
+    base: toBaseState(raw.base),
   };
 }
 
@@ -345,6 +349,28 @@ export const setArmPower = (baseUrl: string, on: boolean) => post(baseUrl, '/arm
 export const setArmEnabled = (baseUrl: string, on: boolean) => post(baseUrl, '/arm/enable', { on }, 10000);
 
 export const taskCommand = (baseUrl: string, cmd: TaskCommand) => post(baseUrl, `/tasks/${cmd}`);
+
+// ---------- the base page's extras (docs/MAP.md "Base and view") ----------
+/** The robot's API is older than this call (HTTP 404): lumi-wave on the Thor needs the update first. */
+export class NeedsUpdateError extends Error {}
+async function orUpdate<T>(call: Promise<T>): Promise<T> {
+  try {
+    return await call;
+  } catch (e) {
+    if (e instanceof Error && e.message.endsWith('HTTP 404')) throw new NeedsUpdateError('update');
+    throw e;
+  }
+}
+/** Speed, ultrasonic and infrared ranges of the base (lumi-wave GET /agv/sensors). */
+export async function getSensors(baseUrl: string, timeoutMs = 4000): Promise<Sensors> {
+  return toSensors(await orUpdate(getJson<RawSensors>(baseUrl, '/agv/sensors', timeoutMs)));
+}
+/** The path the base plans to its goal now, map frame metres; empty when it is not driving (GET /agv/plan). */
+export async function getPlan(baseUrl: string, timeoutMs = 4000): Promise<{ x: number; y: number }[]> {
+  return toPlan(await orUpdate(getJson<{ points?: unknown }>(baseUrl, '/agv/plan', timeoutMs)));
+}
+/** E-STOP: on, the base halts where it is and its drive waits; off, the same drive goes on (POST /agv/estop). */
+export const setEstop = (baseUrl: string, on: boolean) => orUpdate(post(baseUrl, '/agv/estop', { on }, 4000));
 
 // ---------- hold-to-move (/jog) ----------
 /** The robot refuses hand control while a task runs (HTTP 409). */
