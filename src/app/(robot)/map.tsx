@@ -1,7 +1,7 @@
 // The Map screen (owner's pick A2, 2026-11-16): the base's map in the middle with Lumi's live place and heading and the
 // markers; a floating navbar on top (CONTROL, MARKERS, ROUTE, POSITION, MAPPING, MAPS, SETTINGS) with drop-down lists;
 // a small bar at the bottom for what is picked (a marker or a tapped point): SAVE and GO, or SET POSITION.
-// MAPPING makes a new map: a name, then the growing map with Lumi on it, the joystick, SAVE or CANCEL (docs/MAP.md).
+// MAPPING makes a new map: a name, then the growing map with Lumi on it, the joystick, SAVE or STOP (docs/MAP.md).
 // Settings come later (PLAN.md "Map section").
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import {
@@ -21,7 +21,6 @@ import Svg, { Circle, Path, Rect } from 'react-native-svg';
 import {
   BusyError,
   cancelDrive,
-  cancelScan,
   deleteLine,
   deleteMarker,
   getMapInfo,
@@ -818,17 +817,17 @@ export default function MapScreen() {
         },
       ],
     });
-  const cancelMapping = () =>
+  /** The base has no cancel: stopping a scan saves it, so STOP says so and saves (owner, 2026-11-18). */
+  const stopMapping = () =>
     setAsk({
-      title: t('mapScanCancelAsk'),
+      title: t('mapScanStopAsk'),
       choices: [
         {
-          text: t('delete'),
-          destructive: true,
+          text: t('mapScanStop'),
           onPress: () => {
             setScanBusy(true);
-            cancelScan(url).then(
-              (r) => endMapping(r.deleted ? 'mapScanDeleted' : 'mapScanKept'),
+            saveScan(url).then(
+              () => endMapping('mapScanSaved'),
               (e) => {
                 setScanBusy(false);
                 failedNote(e);
@@ -1506,8 +1505,8 @@ export default function MapScreen() {
             <Text style={[styles.btnText, styles.barBusy]}>{t('mapScanSaving')}</Text>
           ) : (
             <>
-              <Pressable onPress={cancelMapping} style={({ pressed }) => [styles.btn, styles.btnQuiet, pressed && styles.pressed]}>
-                <Text style={styles.btnText}>{t('cancel')}</Text>
+              <Pressable onPress={stopMapping} style={({ pressed }) => [styles.btn, styles.btnQuiet, pressed && styles.pressed]}>
+                <Text style={styles.btnText}>{t('mapScanStop')}</Text>
               </Pressable>
               <Pressable onPress={saveMapping} style={({ pressed }) => [styles.btn, styles.btnGo, pressed && styles.pressed]}>
                 <Text style={[styles.btnText, styles.btnGoText]}>{t('mapSave')}</Text>

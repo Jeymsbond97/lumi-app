@@ -330,11 +330,6 @@ export async function getScanPicture(baseUrl: string, name: string, floor: numbe
 export const startScan = (baseUrl: string, name: string) => orBusy(post(baseUrl, '/map/scan/start', { name }, 40000));
 /** Saves the new map; the base answers once it is saved, which can take a while. */
 export const saveScan = (baseUrl: string) => orBusy(post(baseUrl, '/map/scan/save', undefined, 190000));
-/** Stops scanning and deletes the new map; `deleted` false when the base kept it (it stays in MAPS). */
-export async function cancelScan(baseUrl: string): Promise<{ deleted: boolean }> {
-  const r = await orBusy(post(baseUrl, '/map/scan/cancel', undefined, 190000));
-  return { deleted: (r as { deleted?: boolean }).deleted === true };
-}
 
 export async function setMode(baseUrl: string, mode: Mode, on: boolean): Promise<Modes> {
   return toModes((await post(baseUrl, '/assistant/modes', { [mode]: on }, 10000)) as RawModes);
