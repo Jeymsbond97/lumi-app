@@ -27,11 +27,11 @@ function Controls() {
       <BatteryBadge />
       {path !== '/map' && <ModesPanel /> /* the map needs the room; its navbar has its own controls */}
       {!camera && <TaskCard />}
-      {/* the cameras open from the right edge on every section (owner, 2026-11-18) */}
-      <CameraPanel />
+      {/* the cameras open from the right edge on every section (owner, 2026-11-18); Drive shows them big itself */}
+      {path !== '/drive' && <CameraPanel />}
       <Dock />
       {/* the status bar's confirm dialog covers everything here but STOP */}
-      <StatusHud hideReadings={camera} />
+      <StatusHud hideReadings={camera || path === '/drive' /* Drive's BODY page shows them */} />
       <StopButton />
     </Animated.View>
   );
@@ -58,6 +58,7 @@ export default function RobotLayout() {
             {/* every section has to be declared, else this router draws nothing */}
             <Tabs.Screen name="home" />
             <Tabs.Screen name="map" />
+            <Tabs.Screen name="drive" />
           </Tabs>
           <Controls />
         </View>

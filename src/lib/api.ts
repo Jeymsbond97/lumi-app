@@ -1,6 +1,6 @@
 import { fetchWithTimeout } from './connection';
 import type { TextKey } from './i18n';
-import type { AxisCommand } from './drive';
+import type { JogCommand } from './jog';
 import { toMapInfo, type MapInfo } from './mapGeom';
 import { toScanPicture, toScanState, type ScanPicture, type ScanState } from './mapping';
 import { toRouteProgress, type RouteProgress } from './route';
@@ -246,7 +246,7 @@ export async function getModes(baseUrl: string, timeoutMs = 3000): Promise<Modes
 }
 
 // ---------- commands ----------
-const post = (baseUrl: string, path: string, body?: object, timeoutMs = 5000) =>
+export const post = (baseUrl: string, path: string, body?: object, timeoutMs = 5000) =>
   getJson<unknown>(baseUrl, path, timeoutMs, {
     method: 'POST',
     headers: body ? { 'Content-Type': 'application/json' } : undefined,
@@ -350,8 +350,9 @@ export const taskCommand = (baseUrl: string, cmd: TaskCommand) => post(baseUrl, 
 /** The robot refuses hand control while a task runs (HTTP 409). */
 export class BusyError extends Error {}
 
-/** Keeps one axis moving for 0.35 s more; call again about every 150 ms while the joystick is held. */
-export async function jog(baseUrl: string, cmd: AxisCommand): Promise<void> {
+/** Keeps one axis moving for 0.35 s more; call again about every 150 ms while the joystick or a button is held.
+ * Resolves with the error the robot reports for an earlier step of a held axis (once), else null. */
+export async function jog(baseUrl: string, cmd: JogCommand): Promise<string | null> {
   const res = await fetchWithTimeout(`${baseUrl}/jog`, 1000, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
@@ -359,6 +360,8 @@ export async function jog(baseUrl: string, cmd: AxisCommand): Promise<void> {
   });
   if (res.status === 409) throw new BusyError('busy');
   if (!res.ok) throw new Error(`/jog: HTTP ${res.status}`);
+  const reply = (await res.json().catch(() => ({}))) as { error?: unknown };
+  return typeof reply.error === 'string' && reply.error ? reply.error : null;
 }
 
 /** Stops every hold-to-move axis at once (the robot would also stop by itself 0.35 s after the last jog). */

@@ -3,19 +3,15 @@
 // disables or powers it off; each asks first in ConfirmDialog), and on the right under the battery
 // head, waist and lift (only while the head and lift controller answers; no empty placeholders).
 // Battery: BatteryBadge, top right.
-import { useCallback, useEffect, useState } from 'react';
 import { ActivityIndicator, Pressable, StyleSheet, Text, useWindowDimensions, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import * as Haptics from 'expo-haptics';
-import { ARM_TEXT, bodyPoseKnown, setArmEnabled, setArmPower, setBodyEnabled, type ArmState, type Body } from '../lib/api';
+import { ARM_TEXT, bodyPoseKnown, type ArmState } from '../lib/api';
 import type { TextKey } from '../lib/i18n';
 import { useI18n } from '../lib/i18n';
 import { useRobot } from '../lib/robot';
-import { ConfirmDialog, type ConfirmRequest } from './ConfirmDialog';
+import { ConfirmDialog } from './ConfirmDialog';
 import { clamp, fonts, mono } from './theme';
-
-const NOTE_MS = 2500;
-const BUSY_MAX_MS = 8000;
+import { BODY_TEXT, type BodyState, usePowerSwitch } from './usePowerSwitch';
 
 // same colours as the ring on the robot's shoulder in the 3D scene
 export const ARM_DOT: Record<ArmState, string> = {
@@ -34,77 +30,13 @@ const STATE_DOT: Partial<Record<TextKey, string>> = {
 
 export function StatusHud({ hideReadings = false }: { hideReadings?: boolean }) {
   const { t } = useI18n();
-  const { connection, status } = useRobot();
+  const { status } = useRobot();
   const { height: h } = useWindowDimensions();
   const inset = useSafeAreaInsets();
-  // the state of the part when a switch was sent: its chip spins until the robot reports a different one
-  const [sentFrom, setSentFrom] = useState<{ part: 'arm' | 'body'; from: string } | null>(null);
-  const [note, setNote] = useState<TextKey | null>(null);
-  const [ask, setAsk] = useState<ConfirmRequest | null>(null);
-  const closeAsk = useCallback(() => setAsk(null), []);
+  const { arm, body: bodyNow, busyArm, busyBody, switchArm, switchBody, note, ask, closeAsk } = usePowerSwitch();
   const nameSize = clamp(26, 0.07 * h, 56);
   const small = clamp(11, 0.019 * h, 15);
-  const arm = status?.armState ?? 'off';
   const body = status?.body ?? null;
-  const bodyNow = bodyState(body);
-  const busyArm = sentFrom?.part === 'arm' && sentFrom.from === arm;
-  const busyBody = sentFrom?.part === 'body' && sentFrom.from === bodyNow;
-
-  useEffect(() => {
-    if (!note) return;
-    const id = setTimeout(() => setNote(null), NOTE_MS);
-    return () => clearTimeout(id);
-  }, [note]);
-
-  // if the robot never reports the change, the chip stops waiting after a while
-  useEffect(() => {
-    if (!sentFrom) return;
-    const id = setTimeout(() => setSentFrom(null), BUSY_MAX_MS);
-    return () => clearTimeout(id);
-  }, [sentFrom]);
-
-  const send = (part: 'arm' | 'body', call: Promise<unknown>) => {
-    setSentFrom({ part, from: part === 'arm' ? arm : bodyNow });
-    call.catch(() => {
-      setSentFrom(null);
-      setNote('noAnswer');
-    });
-  };
-
-  // off: power on. Powered: enable or power off. Enabled: disable (powering off goes through disabled first).
-  // Free drive and a fault are handled at the arm itself, so the chip only shows them.
-  const switchArm = () => {
-    if (busyArm || arm === 'drag' || arm === 'error') return;
-    Haptics.selectionAsync().catch(() => {});
-    const url = connection.baseUrl;
-    if (arm === 'off') {
-      setAsk({ title: t('armPowerAsk'), choices: [{ text: t('powerOn'), onPress: () => send('arm', setArmPower(url, true)) }] });
-    } else if (arm === 'disabled') {
-      setAsk({
-        title: t('armEnableAsk'),
-        choices: [
-          { text: t('powerOff'), destructive: true, onPress: () => send('arm', setArmPower(url, false)) },
-          { text: t('enable'), onPress: () => send('arm', setArmEnabled(url, true)) },
-        ],
-      });
-    } else {
-      setAsk({
-        title: t('armDisableAsk'),
-        choices: [{ text: t('disable'), destructive: true, onPress: () => send('arm', setArmEnabled(url, false)) }],
-      });
-    }
-  };
-
-  // a silent controller cannot be switched from here, and an older robot API does not say
-  const switchBody = () => {
-    if (busyBody || (bodyNow !== 'enabled' && bodyNow !== 'disabled')) return;
-    Haptics.selectionAsync().catch(() => {});
-    const on = bodyNow === 'disabled';
-    setAsk({
-      title: t(on ? 'bodyEnableAsk' : 'bodyDisableAsk'),
-      choices: [{ text: t(on ? 'enable' : 'disable'), destructive: !on, onPress: () => send('body', setBodyEnabled(connection.baseUrl, on)) }],
-    });
-  };
 
   return (
     <>
@@ -160,19 +92,9 @@ export function StatusHud({ hideReadings = false }: { hideReadings?: boolean }) 
   );
 }
 
-type BodyState = 'off' | 'on' | 'disabled' | 'enabled';
+export const BODY_DOT: Record<BodyState, string> = { off: mono.dim, on: mono.green, disabled: mono.blue, enabled: mono.green };
 
-/** off: the controller does not answer; on: it answers but the robot's API does not say whether it is enabled. */
-function bodyState(body: Body | null): BodyState {
-  if (!body) return 'off';
-  if (body.enabled === null) return 'on';
-  return body.enabled ? 'enabled' : 'disabled';
-}
-
-const BODY_TEXT: Record<BodyState, TextKey> = { off: 'bodyOff', on: 'bodyOn', disabled: 'bodyDisabled', enabled: 'bodyEnabled' };
-const BODY_DOT: Record<BodyState, string> = { off: mono.dim, on: mono.green, disabled: mono.blue, enabled: mono.green };
-
-function Chip({ on, colour, text, size, busy }: { on: boolean; colour: string; text: string; size: number; busy?: boolean }) {
+export function Chip({ on, colour, text, size, busy }: { on: boolean; colour: string; text: string; size: number; busy?: boolean }) {
   const d = size * 0.7;
   return (
     <View style={[styles.chip, { height: size * 2.6, paddingHorizontal: size * 1.1, gap: size * 0.55 }, on && styles.chipOn]}>
