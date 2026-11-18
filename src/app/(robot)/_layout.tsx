@@ -26,7 +26,8 @@ function Controls() {
   return (
     <Animated.View style={StyleSheet.absoluteFill} entering={FadeIn.duration(450)} pointerEvents="box-none">
       <BatteryBadge />
-      {path !== '/map' && <ModesPanel /> /* the map needs the room; its navbar has its own controls */}
+      {/* the map needs the room (its navbar has its own controls); Drive has no use for them (owner, 2026-11-18) */}
+      {path !== '/map' && path !== '/drive' && <ModesPanel />}
       {!camera && <TaskCard />}
       {/* the cameras open from the right edge on every section (owner, 2026-11-18); Drive shows them big itself */}
       {path !== '/drive' && <CameraPanel />}
