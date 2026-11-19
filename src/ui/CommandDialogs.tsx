@@ -87,6 +87,7 @@ export function ChoiceDialog({
   onChange,
   onDone,
   onClose,
+  onPick,
 }: {
   box: Box;
   size: number;
@@ -96,6 +97,8 @@ export function ChoiceDialog({
   onChange: (key: string, id: string) => void;
   onDone: () => void;
   onClose: () => void;
+  /** One field, started by its tap: no field title, no GO. */
+  onPick?: (key: string, id: string) => void;
 }) {
   const { t } = useI18n();
   const ready = fields.every((f) => f.options.some((o) => o.id === values[f.key]));
@@ -105,15 +108,15 @@ export function ChoiceDialog({
       <ScrollView style={styles.scroll} contentContainerStyle={{ gap: size * 0.9 }} keyboardShouldPersistTaps="handled">
         {fields.map((f) => (
           <View key={f.key} style={{ gap: size * 0.45 }}>
-            <Text style={[styles.label, { fontSize: size * 0.78 }]}>{t(f.title)}</Text>
+            {!onPick && <Text style={[styles.label, { fontSize: size * 0.78 }]}>{t(f.title)}</Text>}
             {f.options.length === 0 && f.empty && <Text style={[styles.soft, { fontSize: size * 0.85 }]}>{t(f.empty)}</Text>}
             <View style={[styles.chips, { gap: size * 0.45 }]}>
               {f.options.map((o) => {
-                const on = values[f.key] === o.id;
+                const on = !onPick && values[f.key] === o.id;
                 return (
                   <Pressable
                     key={o.id}
-                    onPress={() => onChange(f.key, o.id)}
+                    onPress={() => (onPick ? onPick(f.key, o.id) : onChange(f.key, o.id))}
                     hitSlop={3}
                     accessibilityRole="radio"
                     accessibilityState={{ selected: on }}
@@ -136,7 +139,7 @@ export function ChoiceDialog({
       </ScrollView>
       <Buttons size={size}>
         <Button text={t('cancel')} size={size} onPress={onClose} muted />
-        <Button text={t('cmdGo')} size={size} onPress={onDone} disabled={!ready} />
+        {!onPick && <Button text={t('cmdGo')} size={size} onPress={onDone} disabled={!ready} />}
       </Buttons>
     </Sheet>
   );
@@ -150,6 +153,8 @@ export function TextDialog({
   placeholder,
   onSend,
   onClose,
+  hint,
+  suggestions,
 }: {
   box: Box;
   size: number;
@@ -157,6 +162,10 @@ export function TextDialog({
   placeholder: TextKey;
   onSend: (text: string) => void;
   onClose: () => void;
+  /** A line under the field (what Lumi sees, or that it sees nothing). */
+  hint?: string;
+  /** Words a tap sends at once. */
+  suggestions?: string[];
 }) {
   const { t } = useI18n();
   const [text, setText] = useState('');
@@ -175,6 +184,26 @@ export function TextDialog({
         onSubmitEditing={() => ok && onSend(text.trim())}
         style={[styles.input, { fontSize: size * 1.05, paddingVertical: size * 0.55 }]}
       />
+      {hint !== undefined && <Text style={[styles.soft, { fontSize: size * 0.85 }]}>{hint}</Text>}
+      {suggestions && suggestions.length > 0 && (
+        <View style={[styles.chips, { gap: size * 0.45 }]}>
+          {suggestions.map((s) => (
+            <Pressable
+              key={s}
+              onPress={() => onSend(s)}
+              hitSlop={3}
+              accessibilityRole="button"
+              style={({ pressed }) => [
+                styles.chip,
+                { paddingHorizontal: size * 0.85, paddingVertical: size * 0.45 },
+                pressed && styles.pressed,
+              ]}
+            >
+              <Text style={[styles.chipText, { fontSize: size * 0.9 }]}>{s}</Text>
+            </Pressable>
+          ))}
+        </View>
+      )}
       <Buttons size={size}>
         <Button text={t('cancel')} size={size} onPress={onClose} muted />
         <Button text={t('cmdSend')} size={size} onPress={() => onSend(text.trim())} disabled={!ok} />

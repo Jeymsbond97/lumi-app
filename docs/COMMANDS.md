@@ -22,6 +22,13 @@ are plain functions in `src/lib/commands.ts`, tested in `src/lib/__tests__/comma
   GO. Objects come from `GET /objects` (what the torso camera sees now, marked "seen now", nearest first) followed by
   every object Lumi knows in any colour; markers from `GET /agv/markers`; poses from `GET /arm/poses`; songs from
   `GET /songs` (proposed below).
+- **Pick up is typed**: a field takes what to take ("blue cup", "파란 컵"), read in English and Korean by
+  `parseThing` (an object Lumi can take, a colour if one is named); SEND starts it at once. Under the field the
+  things seen near now (below) are offered as one tap words.
+- **Move aside** lists only what the torso camera sees now within reach (`seenThings`: 850 mm from the
+  arm's base, 1500 mm with Patrol on, when the base may drive closer), read again every second while the list is open.
+  A tap on a name starts it at once: no GO and no second question (the owner, 2026-11-19). Further "objects" were
+  mostly something else (a blue chair 2.4 m away read as a blue cup, and the pick was refused out of reach).
 - **Anything that moves the arm or the base asks first** in `ConfirmDialog` with a sentence ("Pick up the blue cup?",
   "Drive 0.5 m forward?"). The head, speech, songs and the volume do not ask.
 - Every word is in `src/lib/i18n.tsx` (keys `cmd*`, `obj*`, `col*`), English and Korean.
@@ -35,8 +42,8 @@ are plain functions in `src/lib/commands.ts`, tested in `src/lib/__tests__/comma
 | | Hand it over | | `POST /tasks/give` | Greeter or Patrol, arm, holding |
 | | Take from me | object | `POST /tasks/steps` `[{do: receive, object, from_hand: true}]`; Release (task card or Missions) or "okay" closes the hand | Greeter or Patrol, arm, empty hand |
 | | Move it aside | object | `POST /skills/move` `{object, colour}`, watched on `GET /skills/state` | arm, empty hand |
-| | Wave | | `POST /arm/wave` (answers when done) | arm |
-| | Arm pose | pose | `POST /arm/pose` `{name, speed: slow}` (answers when there) | arm |
+| | Wave | | `POST /arm/wave` (answers when done; follows the global arm speed) | arm |
+| | Arm pose | pose | `POST /arm/pose` `{name}` (answers when there; the robot's global arm speed, set on Drive, applies) | arm |
 | | Open hand / Close hand | | `POST /gripper/open`, `POST /gripper/close` | arm |
 | Moving | Come here | | `POST /tasks/command` `{text: "come here"}` | Patrol |
 | | Follow me | | `POST /tasks/command` `{text: "follow me"}` | Patrol |

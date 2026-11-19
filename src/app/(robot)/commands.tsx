@@ -39,6 +39,9 @@ import {
   singRequest,
   stepVolume,
   thingChoices,
+  seenThings,
+  parseThing,
+  REACH_MM,
   thingId,
   thingText,
   toHolding,
@@ -66,7 +69,7 @@ import {
   type TurnWay,
   type Where,
 } from '../../lib/commands';
-import { useI18n, type TextKey } from '../../lib/i18n';
+import { textOf, useI18n, type TextKey } from '../../lib/i18n';
 import { useRobot } from '../../lib/robot';
 import { CommandIcon, type CommandIconName } from '../../ui/CommandIcon';
 import { ChoiceDialog, CommandBox, TextDialog, type Box, type ChoiceField } from '../../ui/CommandDialogs';
@@ -76,6 +79,7 @@ import { clamp, colors, fonts, mono } from '../../ui/theme';
 const POLL_MS = 1500; // the hand and the last skill, while this screen is open
 const DOCK_SPACE = 64; // room the sections dock takes at the bottom, above the safe area
 const SEEN_WAIT_MS = 3000; // the torso camera's objects when a choice of objects opens
+const SEEN_POLL_MS = 1000; // Pick up and Move aside: the things seen, read again this often while the list is open
 
 type Group = 'arm' | 'move' | 'talk' | 'mission';
 const GROUPS: { key: Group; label: TextKey }[] = [
@@ -182,11 +186,13 @@ export default function CommandsScreen() {
   const [holding, setHolding] = useState<boolean | null>(null);
   const [skill, setSkill] = useState<(SkillState & { readAt: number }) | null>(null);
   const [things, setThings] = useState<Thing[]>(() => thingChoices(null));
+  /** Pick up and Move aside: the things the torso camera sees near now; null until the first reading. */
+  const [seen, setSeen] = useState<Thing[] | null>(null);
   const [last, setLast] = useState<Last | null>(null);
   const [choice, setChoice] = useState<ChoiceKind | null>(null);
   const [values, setValues] = useState<Record<string, string>>({});
   const [confirm, setConfirm] = useState<ConfirmRequest | null>(null);
-  const [text, setText] = useState<'say' | 'ask' | null>(null);
+  const [text, setText] = useState<'say' | 'ask' | 'pick' | null>(null);
   const [box, setBox] = useState<string | null>(null); // the typed command box, with its first words
 
   // what the choices offer, read each time the screen opens; the hand and the skill while it is open
@@ -212,6 +218,21 @@ export default function CommandsScreen() {
       clearInterval(id);
     };
   }, [focused, url]);
+
+  // Pick up and Move aside offer only what the torso camera sees near, read again while the list is open
+  const seenOpen = text === 'pick' || choice === 'aside';
+  const reach = modes?.patrol ? REACH_MM.drive : REACH_MM.arm;
+  useEffect(() => {
+    if (!seenOpen) return;
+    let on = true;
+    const tick = () => read(url, '/objects', SEEN_WAIT_MS).then((r) => on && r !== null && setSeen(seenThings(r, reach)));
+    tick();
+    const id = setInterval(tick, SEEN_POLL_MS);
+    return () => {
+      on = false;
+      clearInterval(id);
+    };
+  }, [seenOpen, url, reach]);
 
   const ready = { modes, armOn: status?.armState === 'enabled', holding };
   const body = status?.body ?? null;
@@ -253,6 +274,30 @@ export default function CommandsScreen() {
     setValues(first);
     setChoice(kind);
   };
+  const openPick = () => {
+    setSeen(null);
+    setText('pick');
+  };
+  const openSeen = (kind: 'pick' | 'aside') => {
+    setSeen(null);
+    open(kind, {});
+  };
+  /** A tap on a thing seen: it starts at once (the owner: no GO, no second question). */
+  const pickSeen = (id: string) => {
+    const kind = choice;
+    const thing = (seen ?? []).find((x) => thingId(x) === id);
+    setChoice(null);
+    if (!thing) return;
+    if (kind === 'pick') fire({ label: 'cmdPick', req: pickRequest(thing, lang) });
+    if (kind === 'aside') fire({ label: 'cmdAside', req: asideRequest(thing), skill: true });
+  };
+  const seenField: ChoiceField = {
+    key: 'thing',
+    title: 'cmdChooseObject',
+    empty: seen === null ? 'cmdLookingNear' : 'cmdNothingNear',
+    options: (seen ?? []).map((x) => ({ id: thingId(x), label: thingText(x, t) })),
+  };
+
   const openThings = (kind: ChoiceKind) => {
     const known = thingChoices(null);
     setThings(known);
@@ -281,8 +326,9 @@ export default function CommandsScreen() {
   const fields = (kind: ChoiceKind): ChoiceField[] => {
     switch (kind) {
       case 'pick':
-      case 'receive':
       case 'aside':
+        return [seenField];
+      case 'receive':
         return [thingField];
       case 'pose':
         return [{ key: 'pose', title: 'cmdChoosePose', empty: 'cmdNoPoses', options: poses.map((p) => ({ id: p, label: p })) }];
@@ -404,6 +450,12 @@ export default function CommandsScreen() {
     setText(null);
     if (kind === 'say') fire({ label: 'cmdSay', req: sayRequest(words, modes, lang), waits: true });
     if (kind === 'ask') fire({ label: 'cmdAsk', req: askRequest(words, modes), waits: true });
+    if (kind === 'pick') {
+      // the owner types what to take; started at once, no second question
+      const thing = parseThing(words, (k) => [textOf('en', k), textOf('ko', k)]);
+      if (thing) fire({ label: 'cmdPick', req: pickRequest(thing, lang) });
+      else refuse('cmdPick', 'cmdPickUnknown');
+    }
   };
 
   const changeVolume = (by: number) => {
@@ -419,7 +471,7 @@ export default function CommandsScreen() {
 
   const TILES: Record<Group, Tile[]> = {
     arm: [
-      { icon: 'pick', label: 'cmdPick', hint: 'cmdPickHint', needs: ['modes', 'arm', 'empty'], onPress: () => openThings('pick') },
+      { icon: 'pick', label: 'cmdPick', hint: 'cmdPickHint', needs: ['modes', 'arm', 'empty'], onPress: () => openPick() },
       {
         icon: 'place',
         label: 'cmdPlace',
@@ -435,7 +487,7 @@ export default function CommandsScreen() {
         onPress: () => go({ label: 'cmdGive', req: giveRequest, ask: t('cmdAskGive') }),
       },
       { icon: 'receive', label: 'cmdReceive', hint: 'cmdReceiveHint', needs: ['modes', 'arm', 'empty'], onPress: () => openThings('receive') },
-      { icon: 'aside', label: 'cmdAside', hint: 'cmdAsideHint', needs: ['arm', 'empty'], onPress: () => openThings('aside') },
+      { icon: 'aside', label: 'cmdAside', hint: 'cmdAsideHint', needs: ['arm', 'empty'], onPress: () => openSeen('aside') },
       {
         icon: 'wave',
         label: 'cmdWave',
@@ -679,14 +731,17 @@ export default function CommandsScreen() {
           onChange={(k, id) => setValues((v) => ({ ...v, [k]: id }))}
           onDone={choiceDone}
           onClose={() => setChoice(null)}
+          onPick={choice === 'pick' || choice === 'aside' ? (_k, id) => pickSeen(id) : undefined}
         />
       )}
       {text && (
         <TextDialog
           box={area}
           size={size}
-          title={text === 'say' ? 'cmdSayTitle' : 'cmdAskTitle'}
-          placeholder={text === 'say' ? 'cmdSayPlaceholder' : 'cmdAskPlaceholder'}
+          title={text === 'say' ? 'cmdSayTitle' : text === 'ask' ? 'cmdAskTitle' : 'cmdPick'}
+          placeholder={text === 'say' ? 'cmdSayPlaceholder' : text === 'ask' ? 'cmdAskPlaceholder' : 'cmdPickPlaceholder'}
+          hint={text === 'pick' ? t(seen === null ? 'cmdLookingNear' : seen.length ? 'cmdSeenNear' : 'cmdNothingNear') : undefined}
+          suggestions={text === 'pick' ? (seen ?? []).map((x) => thingText(x, t)) : undefined}
           onSend={sendText}
           onClose={() => setText(null)}
         />

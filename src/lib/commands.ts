@@ -8,6 +8,8 @@ import type { Modes } from './api';
 export interface Request {
   path: string;
   body?: object;
+  /** POST unless it says otherwise. */
+  method?: 'POST' | 'DELETE';
   /** How long Lumi may take to answer: a wave or an arm pose answers when the move has ended. */
   timeoutMs?: number;
 }
@@ -27,12 +29,12 @@ export function reasonOf(body: unknown): string | null {
   return null;
 }
 
-/** POSTs one command. Never throws: a refusal or a lost answer comes back as a Reply. */
+/** POSTs (or DELETEs) one command. Never throws: a refusal or a lost answer comes back as a Reply. */
 export async function send(baseUrl: string, req: Request): Promise<Reply> {
   let res: Response;
   try {
     res = await fetchWithTimeout(`${baseUrl}${req.path}`, req.timeoutMs ?? 8000, {
-      method: 'POST',
+      method: req.method ?? 'POST',
       headers: req.body ? { 'Content-Type': 'application/json' } : undefined,
       body: req.body ? JSON.stringify(req.body) : undefined,
     });
@@ -134,7 +136,82 @@ export function thingChoices(rawObjects: unknown): Thing[] {
 }
 const dist = (v: unknown) => (typeof v === 'number' && Number.isFinite(v) ? v : 99);
 
+/**
+ * How far from the arm's base (mm, level) a thing seen may be to be offered: the arm's own reach (tasks/fetch.py
+ * FAR_REACH_MM), or further with Patrol on, when the base may drive closer first. A far "cup" is most often something
+ * else (2026-11-19: a blue chair 2.4 m away read as a blue cup).
+ */
+export const REACH_MM = { arm: 850, drive: 1500 } as const;
+
+/** Things the torso camera sees now within `reachMm`, nearest first and each once: what Pick up and Move aside offer. */
+export function seenThings(rawObjects: unknown, reachMm: number): Thing[] {
+  const list = (rawObjects as { objects?: unknown } | null)?.objects;
+  const near: { object: ObjectName; colour: Colour | null; mm: number }[] = [];
+  for (const o of Array.isArray(list) ? list : []) {
+    const name = (o as { name?: unknown } | null)?.name;
+    const pos = (o as { position_mm?: unknown } | null)?.position_mm;
+    if (!isObject(name) || !Array.isArray(pos) || typeof pos[0] !== 'number' || typeof pos[1] !== 'number') continue;
+    const mm = Math.hypot(pos[0], pos[1]);
+    if (!Number.isFinite(mm) || mm > reachMm) continue;
+    const colour = (o as { colour?: unknown }).colour;
+    near.push({ object: name, colour: isColour(colour) ? colour : null, mm });
+  }
+  near.sort((a, b) => a.mm - b.mm);
+  const out: Thing[] = [];
+  for (const n of near) {
+    if (!out.some((t) => t.object === n.object && t.colour === n.colour)) out.push({ object: n.object, colour: n.colour, seen: true });
+  }
+  return out;
+}
+
 export const thingId = (t: Thing) => `${t.colour ?? 'any'}:${t.object}${t.seen ? ':seen' : ''}`;
+
+// Other ways people type a colour, read along with the app's own words (COLOUR_TEXT in both languages).
+const COLOUR_EXTRA: Partial<Record<Colour, string[]>> = {
+  grey: ['gray', '회색의'],
+  red: ['빨강', '빨간색'],
+  blue: ['파랑', '파란색'],
+  yellow: ['노랑', '노란색'],
+  white: ['하양', '하얀', '흰색'],
+  black: ['검정', '검정색', '검은색'],
+  green: ['초록', '녹색'],
+};
+
+/**
+ * The thing a typed request names ("blue cup", "the red bottle", "파란 컵", "파란컵"), read in English and Korean
+ * with `words(key)` giving a text key's words in every language. The object named last wins (a colour comes first in
+ * both languages, so "orange cup" is a cup); null when no object Lumi can take is named.
+ */
+export function parseThing(typed: string, words: (k: TextKey) => string[]): Thing | null {
+  const text = typed.toLowerCase().replace(/\s+/g, ' ').trim();
+  const flat = text.replace(/ /g, '');
+  const at = (w: string) => {
+    const word = w.toLowerCase();
+    const i = text.lastIndexOf(word);
+    return i >= 0 ? { i, len: word.length, flat: false } : (() => {
+      const j = flat.lastIndexOf(word.replace(/ /g, ''));
+      return j >= 0 ? { i: j, len: word.replace(/ /g, '').length, flat: true } : null;
+    })();
+  };
+  let best: { object: ObjectName; i: number; len: number; flat: boolean } | null = null;
+  for (const object of OBJECTS) {
+    for (const w of [object, ...words(OBJECT_TEXT[object])]) {
+      const hit = at(w);
+      if (hit && (!best || hit.i > best.i)) best = { object, ...hit };
+    }
+  }
+  if (!best) return null;
+  const found = best;
+  const rest = found.flat ? flat.slice(0, found.i) + flat.slice(found.i + found.len) : text.slice(0, found.i) + text.slice(found.i + found.len);
+  let colour: Colour | null = null;
+  for (const c of COLOURS) {
+    for (const w of [c, ...words(COLOUR_TEXT[c]), ...(COLOUR_EXTRA[c] ?? [])]) {
+      const word = w.toLowerCase();
+      if (found.flat ? rest.includes(word.replace(/ /g, '')) : new RegExp(`(^|[^a-z])${word}`).test(rest)) colour = c;
+    }
+  }
+  return { object: found.object, colour, seen: false };
+}
 
 /** "blue cup", "cup". */
 export function thingText(t: Thing, tr: (k: TextKey) => string): string {
@@ -241,7 +318,8 @@ export const placeRequest: Request = { path: '/tasks/place', body: { on: null } 
 export const giveRequest: Request = { path: '/tasks/give' };
 export const releaseRequest: Request = { path: '/tasks/release' };
 export const waveRequest: Request = { path: '/arm/wave', timeoutMs: 90000 };
-export const poseRequest = (name: string): Request => ({ path: '/arm/pose', body: { name, speed: 'slow' }, timeoutMs: 90000 });
+/** No speed: the robot's global arm speed (/arm/speed) applies. */
+export const poseRequest = (name: string): Request => ({ path: '/arm/pose', body: { name }, timeoutMs: 90000 });
 export const gripperRequest = (open: boolean): Request => ({ path: open ? '/gripper/open' : '/gripper/close', timeoutMs: 10000 });
 export const comeRequest = commandRequest('come here');
 export const followRequest = commandRequest('follow me');

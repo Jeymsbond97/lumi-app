@@ -9,6 +9,7 @@ import {
   parsedMoves,
   parsedStart,
   pickRequest,
+  poseRequest,
   reasonKey,
   reasonOf,
   sayRequest,
@@ -25,7 +26,15 @@ import {
   toSkillState,
   toSongs,
   turnRequest,
+  seenThings,
+  REACH_MM,
+  parseThing,
 } from '../commands';
+import { textOf } from '../i18n';
+
+// i18n stores the language; the mock stands in for the native module (jest.mock needs require here)
+// eslint-disable-next-line @typescript-eslint/no-require-imports
+jest.mock('@react-native-async-storage/async-storage', () => require('@react-native-async-storage/async-storage/jest/async-storage-mock'));
 
 const off: Modes = { greeter: false, patrol: false, wave_greet: false, welcome: false };
 const greeter: Modes = { ...off, greeter: true };
@@ -116,6 +125,10 @@ describe('readings', () => {
 });
 
 describe('requests', () => {
+  it('sends a pose by its name only, so the global arm speed applies', () => {
+    expect(poseRequest('look')).toEqual({ path: '/arm/pose', body: { name: 'look' }, timeoutMs: 90000 });
+  });
+
   it('picks as a one step mission, the way voice does it', () => {
     expect(pickRequest({ object: 'cup', colour: 'blue', seen: true }, 'ko')).toEqual({
       path: '/tasks/steps',
@@ -280,5 +293,53 @@ describe('stepLine', () => {
     expect(say({ do: 'wait', s: 120 })).toBe('Wait 120 s');
     expect(say({ do: 'say', text: 'Anvar says hello' })).toBe('Say “Anvar says hello”');
     expect(say({ do: 'dance' })).toBe('Do dance');
+  });
+});
+
+describe('seenThings', () => {
+  const raw = {
+    objects: [
+      { name: 'cup', colour: 'blue', position_mm: [-1264, 2072, -150] }, // the far "cup" of 2026-11-19
+      { name: 'chair', colour: 'blue', position_mm: [-994, 2072, -384] },
+      { name: 'bottle', colour: 'white', position_mm: [-150, 600, -330] },
+      { name: 'cup', colour: 'red', position_mm: [-120, 560, -330] },
+      { name: 'cup', colour: 'red', position_mm: [-110, 570, -330] },
+      { name: 'apple', colour: 'red', position_mm: null },
+      { name: 'orange', colour: 'orange', position_mm: [900, 900, -330] },
+    ],
+  };
+  it('offers only things Lumi can take within reach, nearest first and each once', () => {
+    expect(seenThings(raw, REACH_MM.arm)).toEqual([
+      { object: 'cup', colour: 'red', seen: true },
+      { object: 'bottle', colour: 'white', seen: true },
+    ]);
+  });
+  it('reaches further when the base may drive closer', () => {
+    expect(seenThings(raw, REACH_MM.drive).map((t) => t.object)).toEqual(['cup', 'bottle', 'orange']);
+  });
+  it('is empty without a reading', () => {
+    expect(seenThings(null, REACH_MM.arm)).toEqual([]);
+  });
+});
+
+describe('parseThing', () => {
+  const words = (k: Parameters<typeof textOf>[1]) => [textOf('en', k), textOf('ko', k)];
+  it.each([
+    ['blue cup', 'cup', 'blue'],
+    ['  the Red BOTTLE please ', 'bottle', 'red'],
+    ['cup', 'cup', null],
+    ['orange', 'orange', null],
+    ['orange cup', 'cup', 'orange'],
+    ['gray cup', 'cup', 'grey'],
+    ['파란 컵', 'cup', 'blue'],
+    ['파란컵', 'cup', 'blue'],
+    ['빨간색 사과', 'apple', 'red'],
+    ['병', 'bottle', null],
+  ])('%s', (typed, object, colour) => {
+    expect(parseThing(typed, words)).toEqual({ object, colour, seen: false });
+  });
+  it('is null for something Lumi cannot take', () => {
+    expect(parseThing('chair', words)).toBeNull();
+    expect(parseThing('', words)).toBeNull();
   });
 });
