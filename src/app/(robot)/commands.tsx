@@ -1,7 +1,8 @@
 // The Commands screen (docs/COMMANDS.md): everything Lumi can do, each a tap or a tap and a small choice, grouped as
-// Arm & objects, Moving, Talking and Missions. Anything that moves the arm or the base asks first. The line under the
-// groups says how the last tap went (sent, refused and why), and what Lumi is doing; the task card on the right has
-// Pause, Release and Stop as on every screen. Missions has the typed command box: read as voice reads it first.
+// Arm & objects, Moving, Talking and Missions; Arm setup has the arm by hand instead (ui/ArmSetupPanel). Anything
+// that moves the arm or the base asks first. The line under the groups says how the last tap went (sent, refused and
+// why), and what Lumi is doing; the task card on the right has Pause, Release and Stop as on every screen. Missions
+// has the typed command box: read as voice reads it first.
 // The content sits between the modes on the left, the task card on the right, the power chips on top and the Dock.
 import { useCallback, useEffect, useState } from 'react';
 import { Pressable, ScrollView, StyleSheet, Text, useWindowDimensions, View } from 'react-native';
@@ -24,13 +25,11 @@ import {
   followRequest,
   giveRequest,
   goRequest,
-  gripperRequest,
   lookRequest,
   parsedMoves,
   parsedStart,
   pickRequest,
   placeRequest,
-  poseRequest,
   read,
   reasonKey,
   receiveRequest,
@@ -47,7 +46,6 @@ import {
   toHolding,
   toMarkers,
   toOutcome,
-  toPoses,
   toSkillState,
   toSongs,
   toVolume,
@@ -70,10 +68,14 @@ import {
   type Where,
 } from '../../lib/commands';
 import { textOf, useI18n, type TextKey } from '../../lib/i18n';
+import { validPoseName } from '../../lib/arm';
 import { useRobot } from '../../lib/robot';
+import { ArmSetupPanel, type ArmReport, type NameRequest } from '../../ui/ArmSetupPanel';
 import { CommandIcon, type CommandIconName } from '../../ui/CommandIcon';
 import { ChoiceDialog, CommandBox, TextDialog, type Box, type ChoiceField } from '../../ui/CommandDialogs';
 import { ConfirmDialog, type ConfirmRequest } from '../../ui/ConfirmDialog';
+import { NameDialog } from '../../ui/NameDialog';
+import { usePowerSwitch } from '../../ui/usePowerSwitch';
 import { clamp, colors, fonts, mono } from '../../ui/theme';
 
 const POLL_MS = 1500; // the hand and the last skill, while this screen is open
@@ -81,15 +83,16 @@ const DOCK_SPACE = 64; // room the sections dock takes at the bottom, above the 
 const SEEN_WAIT_MS = 3000; // the torso camera's objects when a choice of objects opens
 const SEEN_POLL_MS = 1000; // Pick up and Move aside: the things seen, read again this often while the list is open
 
-type Group = 'arm' | 'move' | 'talk' | 'mission';
+type Group = 'arm' | 'move' | 'talk' | 'mission' | 'armSetup';
 const GROUPS: { key: Group; label: TextKey }[] = [
   { key: 'arm', label: 'cmdGroupArm' },
   { key: 'move', label: 'cmdGroupMove' },
   { key: 'talk', label: 'cmdGroupTalk' },
   { key: 'mission', label: 'cmdGroupMission' },
+  { key: 'armSetup', label: 'cmdGroupArmSetup' },
 ];
 
-type ChoiceKind = 'pick' | 'receive' | 'aside' | 'pose' | 'goto' | 'fetch' | 'carry' | 'drive' | 'turn' | 'look' | 'sing';
+type ChoiceKind = 'pick' | 'receive' | 'aside' | 'goto' | 'fetch' | 'carry' | 'drive' | 'turn' | 'look' | 'sing';
 
 /** One tap's request: `ask` is the question before it moves anything; `waits` it answers when done. */
 interface Run {
@@ -151,7 +154,6 @@ const CHOICE_TITLE: Record<ChoiceKind, TextKey> = {
   pick: 'cmdPick',
   receive: 'cmdReceive',
   aside: 'cmdAside',
-  pose: 'cmdPose',
   goto: 'cmdGoTo',
   fetch: 'cmdFetch',
   carry: 'cmdCarry',
@@ -179,7 +181,6 @@ export default function CommandsScreen() {
 
   const [group, setGroup] = useState<Group>('arm');
   const [markers, setMarkers] = useState<string[]>([]);
-  const [poses, setPoses] = useState<string[]>([]);
   /** null: the robot has no GET /songs (yet); songs are then asked for by words. */
   const [songs, setSongs] = useState<Song[] | null>(null);
   const [volume, setVolume] = useState<number | null>(null);
@@ -194,13 +195,14 @@ export default function CommandsScreen() {
   const [confirm, setConfirm] = useState<ConfirmRequest | null>(null);
   const [text, setText] = useState<'say' | 'ask' | 'pick' | null>(null);
   const [box, setBox] = useState<string | null>(null); // the typed command box, with its first words
+  const [naming, setNaming] = useState<NameRequest | null>(null); // ARM SETUP's pose name
+  const power = usePowerSwitch(); // ARM SETUP's arm chip
 
   // what the choices offer, read each time the screen opens; the hand and the skill while it is open
   useEffect(() => {
     if (!focused) return;
     let on = true;
     read(url, '/agv/markers').then((r) => on && setMarkers(toMarkers(r)));
-    read(url, '/arm/poses').then((r) => on && setPoses(toPoses(r)));
     read(url, '/songs').then((r) => on && setSongs(r === null ? null : toSongs(r)));
     read(url, '/volume').then((r) => on && setVolume(toVolume(r)));
     const tick = () => {
@@ -261,6 +263,10 @@ export default function CommandsScreen() {
   const refuse = useCallback((label: TextKey, why: TextKey) => {
     Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning).catch(() => {});
     setLast({ label, at: Date.now(), skill: false, key: why, phase: 'refused', reason: null, answer: null });
+  }, []);
+  /** ARM SETUP's taps, on the same status line. */
+  const report = useCallback((r: ArmReport) => {
+    setLast({ label: r.label, at: Date.now(), skill: false, key: r.key ?? null, phase: r.phase, reason: r.reason ?? null, answer: null });
   }, []);
   const tap = (tile: Tile) => {
     const why = tile.off ?? blocked(tile.needs ?? [], ready);
@@ -330,8 +336,6 @@ export default function CommandsScreen() {
         return [seenField];
       case 'receive':
         return [thingField];
-      case 'pose':
-        return [{ key: 'pose', title: 'cmdChoosePose', empty: 'cmdNoPoses', options: poses.map((p) => ({ id: p, label: p })) }];
       case 'goto':
         return [markerField('marker', 'cmdChooseMarker', false)];
       case 'fetch':
@@ -397,8 +401,6 @@ export default function CommandsScreen() {
         return thing
           ? { label: 'cmdAside', req: asideRequest(thing), ask: fill(t('cmdAskAside'), { thing: thingText(thing, t) }), skill: true }
           : null;
-      case 'pose':
-        return { label: 'cmdPose', req: poseRequest(v.pose), ask: fill(t('cmdAskPose'), { pose: v.pose }), waits: true };
       case 'goto':
         return { label: 'cmdGoTo', req: goRequest(v.marker), ask: fill(t('cmdAskGo'), { marker: said(v.marker) }) };
       case 'fetch':
@@ -469,7 +471,7 @@ export default function CommandsScreen() {
   const firstMarker = markers.find((m) => m !== DOCK_MARKER) ?? markers[0] ?? '';
   const buttons = task ? taskButtons(task) : [];
 
-  const TILES: Record<Group, Tile[]> = {
+  const TILES: Record<Exclude<Group, 'armSetup'>, Tile[]> = {
     arm: [
       { icon: 'pick', label: 'cmdPick', hint: 'cmdPickHint', needs: ['modes', 'arm', 'empty'], onPress: () => openPick() },
       {
@@ -494,21 +496,6 @@ export default function CommandsScreen() {
         hint: 'cmdWaveHint',
         needs: ['arm'],
         onPress: () => go({ label: 'cmdWave', req: waveRequest, ask: t('cmdAskWave'), waits: true }),
-      },
-      { icon: 'pose', label: 'cmdPose', hint: 'cmdPoseHint', needs: ['arm'], onPress: () => open('pose', { pose: poses[0] ?? '' }) },
-      {
-        icon: 'gripOpen',
-        label: 'cmdGripOpen',
-        hint: 'cmdGripHint',
-        needs: ['arm'],
-        onPress: () => go({ label: 'cmdGripOpen', req: gripperRequest(true), ask: t('cmdAskGripOpen'), waits: true }),
-      },
-      {
-        icon: 'gripClose',
-        label: 'cmdGripClose',
-        hint: 'cmdGripHint',
-        needs: ['arm'],
-        onPress: () => go({ label: 'cmdGripClose', req: gripperRequest(false), ask: t('cmdAskGripClose'), waits: true }),
       },
     ],
     move: [
@@ -589,13 +576,14 @@ export default function CommandsScreen() {
   const tileW = (inner - gap * (cols - 1)) / cols;
 
   const statusLine = (): { dot: string; head: string; words: string } => {
+    if (group === 'armSetup' && power.note) return { dot: mono.yellow, head: t('cmdGroupArmSetup'), words: t(power.note) };
     if (!last) {
       if (!task) return { dot: mono.dim, head: t('cmdTask'), words: t('cmdNoTask') };
       const k = taskStepText(task.step);
       return { dot: mono.green, head: t('cmdTask'), words: k ? t(k) : task.step };
     }
     const head = t(last.label);
-    if (last.key) return { dot: mono.yellow, head, words: t(last.key) };
+    if (last.key) return { dot: last.phase === 'done' ? mono.green : last.phase === 'lost' ? mono.red : mono.yellow, head, words: t(last.key) };
     const said = (r: string | null) => {
       const k = reasonKey(r);
       return k ? t(k) : r ?? t('cmdRefused');
@@ -670,55 +658,59 @@ export default function CommandsScreen() {
           </Text>
         )}
 
-        <ScrollView style={styles.tilesScroll} contentContainerStyle={[styles.tiles, { gap }]} showsVerticalScrollIndicator={false}>
-          {TILES[group].map((tile) => {
-            const why = tile.off ?? blocked(tile.needs ?? [], ready);
-            return (
-              <Pressable
-                key={tile.label}
-                onPress={() => tap(tile)}
-                accessibilityRole="button"
-                accessibilityLabel={t(tile.label)}
-                accessibilityHint={why ? t(why) : tile.hint && t(tile.hint)}
-                style={({ pressed }) => [
-                  styles.tile,
-                  {
-                    width: tile.wide ? inner : tileW,
-                    minHeight: size * 5.6,
-                    padding: size * 0.8,
-                    gap: size * 0.35,
-                  },
-                  tile.red && styles.tileRed,
-                  !!why && styles.tileOff,
-                  pressed && styles.pressed,
-                ]}
-              >
-                <CommandIcon name={tile.icon} size={size * 1.7} color={tile.red && !why ? mono.red : mono.text} />
-                <Text style={[styles.tileLabel, { fontSize: size * 0.92 }]} numberOfLines={2}>
-                  {t(tile.label)}
-                </Text>
-                {tile.hint && (
-                  <Text style={[styles.tileHint, { fontSize: size * 0.72 }]} numberOfLines={2}>
-                    {t(tile.hint)}
+        {group === 'armSetup' ? (
+          <ArmSetupPanel size={size} width={inner} power={power} onReport={report} onAsk={setConfirm} onName={setNaming} />
+        ) : (
+          <ScrollView style={styles.tilesScroll} contentContainerStyle={[styles.tiles, { gap }]} showsVerticalScrollIndicator={false}>
+            {TILES[group].map((tile) => {
+              const why = tile.off ?? blocked(tile.needs ?? [], ready);
+              return (
+                <Pressable
+                  key={tile.label}
+                  onPress={() => tap(tile)}
+                  accessibilityRole="button"
+                  accessibilityLabel={t(tile.label)}
+                  accessibilityHint={why ? t(why) : tile.hint && t(tile.hint)}
+                  style={({ pressed }) => [
+                    styles.tile,
+                    {
+                      width: tile.wide ? inner : tileW,
+                      minHeight: size * 5.6,
+                      padding: size * 0.8,
+                      gap: size * 0.35,
+                    },
+                    tile.red && styles.tileRed,
+                    !!why && styles.tileOff,
+                    pressed && styles.pressed,
+                  ]}
+                >
+                  <CommandIcon name={tile.icon} size={size * 1.7} color={tile.red && !why ? mono.red : mono.text} />
+                  <Text style={[styles.tileLabel, { fontSize: size * 0.92 }]} numberOfLines={2}>
+                    {t(tile.label)}
                   </Text>
-                )}
-              </Pressable>
-            );
-          })}
-          {group === 'talk' && (
-            <View style={[styles.tile, { width: tileW, minHeight: size * 5.6, padding: size * 0.8, gap: size * 0.35 }]}>
-              <CommandIcon name="volume" size={size * 1.7} color={mono.text} />
-              <Text style={[styles.tileLabel, { fontSize: size * 0.92 }]}>{t('cmdVolume')}</Text>
-              <View style={[styles.stepper, { gap: size * 0.4 }]}>
-                <StepButton plus={false} size={size} onPress={() => changeVolume(-VOLUME_STEP)} disabled={volume === null} label={t('cmdVolumeDown')} />
-                <Text style={[styles.volume, { fontSize: size * 0.9, minWidth: size * 3.2 }]}>
-                  {volume === null ? '' : fill(t('cmdPercent'), { p: volume })}
-                </Text>
-                <StepButton plus size={size} onPress={() => changeVolume(VOLUME_STEP)} disabled={volume === null} label={t('cmdVolumeUp')} />
+                  {tile.hint && (
+                    <Text style={[styles.tileHint, { fontSize: size * 0.72 }]} numberOfLines={2}>
+                      {t(tile.hint)}
+                    </Text>
+                  )}
+                </Pressable>
+              );
+            })}
+            {group === 'talk' && (
+              <View style={[styles.tile, { width: tileW, minHeight: size * 5.6, padding: size * 0.8, gap: size * 0.35 }]}>
+                <CommandIcon name="volume" size={size * 1.7} color={mono.text} />
+                <Text style={[styles.tileLabel, { fontSize: size * 0.92 }]}>{t('cmdVolume')}</Text>
+                <View style={[styles.stepper, { gap: size * 0.4 }]}>
+                  <StepButton plus={false} size={size} onPress={() => changeVolume(-VOLUME_STEP)} disabled={volume === null} label={t('cmdVolumeDown')} />
+                  <Text style={[styles.volume, { fontSize: size * 0.9, minWidth: size * 3.2 }]}>
+                    {volume === null ? '' : fill(t('cmdPercent'), { p: volume })}
+                  </Text>
+                  <StepButton plus size={size} onPress={() => changeVolume(VOLUME_STEP)} disabled={volume === null} label={t('cmdVolumeUp')} />
+                </View>
               </View>
-            </View>
-          )}
-        </ScrollView>
+            )}
+          </ScrollView>
+        )}
       </View>
 
       {choice && (
@@ -758,6 +750,19 @@ export default function CommandsScreen() {
         />
       )}
       <ConfirmDialog request={confirm} onClose={() => setConfirm(null)} />
+      <ConfirmDialog request={power.ask} onClose={power.closeAsk} />
+      <NameDialog
+        open={!!naming}
+        title="armSaveTitle"
+        rule="armPoseNameRule"
+        initial={naming?.initial ?? ''}
+        valid={validPoseName}
+        onDone={(name) => {
+          setNaming(null);
+          naming?.onDone(name);
+        }}
+        onClose={() => setNaming(null)}
+      />
     </View>
   );
 }

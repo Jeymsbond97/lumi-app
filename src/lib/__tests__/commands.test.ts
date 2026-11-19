@@ -9,7 +9,6 @@ import {
   parsedMoves,
   parsedStart,
   pickRequest,
-  poseRequest,
   reasonKey,
   reasonOf,
   sayRequest,
@@ -22,7 +21,6 @@ import {
   toMarkers,
   toOutcome,
   toParsed,
-  toPoses,
   toSkillState,
   toSongs,
   turnRequest,
@@ -95,10 +93,9 @@ describe('thingChoices', () => {
 });
 
 describe('readings', () => {
-  it('reads markers, poses in the dashboard order and songs', () => {
+  it('reads markers and songs', () => {
     expect(toMarkers({ markers: ['home', 'p1', 3, ''] })).toEqual(['home', 'p1']);
     expect(toMarkers({ error: 'timeout' })).toEqual([]);
-    expect(toPoses({ wave: [0], zeta: [0], look: [0], give: [0], broken: 'x' })).toEqual(['look', 'give', 'wave', 'zeta']);
     expect(toSongs({ songs: [{ id: 'A', title: 'BAD', title_ko: '배드' }, { id: 'B', title: 'X' }, { title: 'no id' }] })).toEqual([
       { id: 'A', title: 'BAD', titleKo: '배드' },
       { id: 'B', title: 'X', titleKo: 'X' },
@@ -125,10 +122,6 @@ describe('readings', () => {
 });
 
 describe('requests', () => {
-  it('sends a pose by its name only, so the global arm speed applies', () => {
-    expect(poseRequest('look')).toEqual({ path: '/arm/pose', body: { name: 'look' }, timeoutMs: 90000 });
-  });
-
   it('picks as a one step mission, the way voice does it', () => {
     expect(pickRequest({ object: 'cup', colour: 'blue', seen: true }, 'ko')).toEqual({
       path: '/tasks/steps',

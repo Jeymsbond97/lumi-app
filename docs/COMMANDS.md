@@ -10,8 +10,9 @@ are plain functions in `src/lib/commands.ts`, tested in `src/lib/__tests__/comma
 - The content sits in the free middle of the screen: right of the modes (Greeter, Patrol, Wave, Welcome stay on the
   left: most commands need one of them), left of the readings, or of the task card while a task runs, under the power
   chips and above the Dock. STOP (bottom left), the Dock, the battery and the task card stay on top, as on every screen.
-- **Groups** on top: ARM & OBJECTS, MOVING, TALKING, MISSIONS. One group's tiles show at a time, so a phone
-  (landscape, about 844 × 390) fits them; the tile grid scrolls.
+- **Groups** on top: ARM & OBJECTS, MOVING, TALKING, MISSIONS, ARM SETUP. One group's tiles show at a time, so a
+  phone (landscape, about 844 × 390) fits them; the tile grid scrolls. ARM SETUP shows the arm settings panel instead
+  of tiles (below).
 - **The status line** under the groups: how the last tap went (sending, Lumi is on it, the assistant does it, done,
   refused and the robot's reason, Lumi did not answer). For "Move it aside" it follows `/skills/state` (working, done,
   refused with its reason). With no tap yet it shows the running task's step. An `/ask` answer is shown under it.
@@ -43,8 +44,6 @@ are plain functions in `src/lib/commands.ts`, tested in `src/lib/__tests__/comma
 | | Take from me | object | `POST /tasks/steps` `[{do: receive, object, from_hand: true}]`; Release (task card or Missions) or "okay" closes the hand | Greeter or Patrol, arm, empty hand |
 | | Move it aside | object | `POST /skills/move` `{object, colour}`, watched on `GET /skills/state` | arm, empty hand |
 | | Wave | | `POST /arm/wave` (answers when done; follows the global arm speed) | arm |
-| | Arm pose | pose | `POST /arm/pose` `{name}` (answers when there; the robot's global arm speed, set on Drive, applies) | arm |
-| | Open hand / Close hand | | `POST /gripper/open`, `POST /gripper/close` | arm |
 | Moving | Come here | | `POST /tasks/command` `{text: "come here"}` | Patrol |
 | | Follow me | | `POST /tasks/command` `{text: "follow me"}` | Patrol |
 | | Go to | marker | `POST /agv/go` `{marker}` | |
@@ -68,6 +67,77 @@ gripper, head, skills) are refused while something runs (`Busy with a task. Paus
 The typed command box shows the robot's reading in English (`sentence`, the robot has no Korean one), a mission's
 steps one per line in the app's language (`stepLine`), and the robot's problems; START is enabled only when there is
 an action and no problem. Moves are asked first; answers, songs and "stop" are not (`parsedMoves`).
+
+## ARM SETUP: the arm by hand (`src/ui/ArmSetupPanel.tsx`)
+
+Moved here from the Drive screen (now the CAMERA tab) on 2026-11-19 (the owner: that screen keeps the body, the arm's controls are a settings part of
+Commands). Arm pose, Open hand and Close hand left ARM & OBJECTS with it. Laid out as Cobo π's Manual page (the arm's
+own teach pendant), in the app's dark panels; the shapes are in `lib/armPad.ts` and `ui/ArmPads.tsx`.
+
+- **Header** (slim): the arm state chip (tap: power on, enable, disable, power off, asked first; `POST /arm/power
+  {on}`, `POST /arm/enable {on}`) and STOP ARM (`POST /arm/stop`; always active, red outline, not the main STOP).
+- **3D simulation**: the arm alone (no Lumi body, logos hidden) mounted on its side as on Lumi, over a white grid on a mid grey
+  ground, RGB triads at its base and its flange, a round XYZ orientation gizmo bottom right: the scene's `arm` view
+  (`setState({view: 'arm'})` to `web/home3d.html`, `armSceneState`), in `ui/LumiScene.tsx` as on Home. It is framed on
+  a sphere of the arm's whole reach round its shoulder, so every pose stays in the picture. It shows the real arm: the
+  joints from `GET /arm/joints` 5 times a second while the arm has power (`useLiveJoints`), gliding between readings.
+  The model has no gripper fingers, so the gripper is not drawn. The WebView is mounted only while ARM SETUP shows on
+  a focused screen, and its page starts in the arm view (`LumiScene initial`, written into the page as
+  `window.LUMI_STATE` before it runs), so Lumi's whole body never flashes first. Home's view is unchanged.
+- **Joint angles and frame**: the joints go to the model exactly as on Home (the model's angles are the
+  controller's), and the arm view draws the arm alone in the controller's own frame, z up, as it is mounted on Lumi:
+  on its side, J1 level along x, its base on a plain grey plate and post where the torso holds it, the floor grid
+  0.26 m under the base, close under the arm as in Cobo π (a pose that reaches lower passes through the grid's
+  lines), and the RGB triad at the controller's base origin (X red, Y green, Z blue
+  up, as the gizmo). The frame is fitted to 13 of the controller's own forward kinematics readings (`kine_forward`,
+  2026-11-19): the model's arm frame turned a quarter turn about z and 30.4 mm along x puts the flange within 1.1 mm
+  of every reading (`flangeMm` in `lib/armFrame.ts`, all 13 in `lib/__tests__/armFrame.test.ts`). The view starts as
+  Cobo π's: a little from above and the front, looking slightly down, the arm's usual poses filling about two thirds
+  of the height and the grid the lower half. Then it is the person's: orbit, zoom and pan stay exactly where they are
+  left (no gliding back, no new framing on new joints or a resize); a double tap frames it again. Home keeps its own
+  behaviour (it glides back to the whole robot).
+- **TCP read-out** under the 3D view: `X Y Z` in mm and `RX RY RZ` in degrees, one decimal (`GET /arm/state` `tcp`
+  every 500 ms while the arm has power; `toTcp`, `tcpParts`). The controller drops its connection for about half a
+  second every few seconds, and the robot's own round then reports the arm silent (no joints, and the live joint reads
+  pause). On this screen a value once read is never hidden again: a failed read changes nothing, the read-out, the
+  joint angles and the 3D arm keep the last good values until a new good read. Only before the first read are they
+  empty.
+- **JOINTS**: J1 to J6 as Cobo π's quarter rings: the angle on top, the lower left half turns the joint minus, the
+  upper right half plus, the joint's name in the ring's corner. Hold: `POST /jog {axis: j1 to j6, speed: 1}` (the
+  global arm speed scales it); release: `POST /jog/stop`. The held half turns red.
+- **POSES** (a tab beside JOINTS): SAVED poses first with their small red delete control (asked first;
+  `GET /arm/poses/saved`, `DELETE /arm/poses/{name}`), then BUILT IN (`GET /arm/poses`; `splitPoses`), in a fixed area
+  that scrolls by itself. A tap asks first, then `POST /arm/pose {name}` (`{name, speed: "slow"}` for a robot without
+  `/arm/speed`). SAVE names where the arm is now (1 to 24 letters, digits, _ or -) and sends `POST /arm/teach {name}`.
+- **SPACE ADJUST**: the Z capsule (Z+ top, Z- bottom) beside the round pad (Y+ top, Y- bottom, X- left, X+ right, a
+  small hub). Hold: `POST /jog {axis: tcp_x, tcp_y, tcp_z, speed: 1}` in the arm's base frame (x +1 forward, y +1
+  left, z +1 up). Cobo π's rotation pads (RX, RY, RZ) are left out: the robot API has no rotation jog. A robot without
+  `/arm/speed` has no straight moves: the pad is dimmed and says so.
+- **GRIPPER**: its state (`GET /gripper/state` every 2 s while the arm has power), OPEN and CLOSE
+  (`POST /gripper/open`, `/gripper/close`); close asks first, open asks first while it holds something.
+- **Speed**: the robot's global arm speed (every arm motion follows it) on Cobo π's ticked scale: the ticks 1, 5,
+  20, 50, 100 that fall inside the robot's range are labelled and sit evenly along the track, the value runs linearly
+  between two of them (`tickStops`, `tickFraction`, `tickValue`, `tickLabels` in `lib/speed.ts`); the percent in a box
+  at the top right. `GET /arm/speed` when the group shows; `POST /arm/speed {percent}` when the finger lifts. A robot
+  whose `GET /arm/speed` is 404 gets the Slow, Normal, Fast button instead (0.2, 0.5, 1 as the jog speed).
+
+Controls that cannot act now are dimmed; a touch says why on the status line (enable the arm first, arm off). How
+each tap went is on the status line too: the part's name, then done, refused with the robot's reason, or no answer.
+
+Layout (`armSetupLayout` in `lib/arm.ts`):
+
+- **Wide** when the free width is at least 48 text sizes (a tablet): the header across the top; left two thirds the
+  3D view with its read-out (about two thirds of the height) over the JOINTS / POSES panel; right third SPACE ADJUST,
+  GRIPPER and the speed, one card with quiet section labels. Nothing scrolls but the poses. Holds start at once.
+- **Compact** otherwise (a phone on its side, a tablet while the task card is open): the 3D view on the left (40 %,
+  STOP ARM on its corner; the arm chip is the shared one in the top bar), the controls in tabs in the middle (JOINTS
+  as a sideways strip of rings, POSES, MOVE: the pad and the gripper), the speed as an upright fader on the right,
+  always in view (`ui/SpeedFader.tsx`). Because the controls scroll, holds start only once the finger has stayed
+  down 120 ms without moving more than 6 px (`createDelayedPress` in `lib/jog.ts`): a scroll that starts on one
+  moves nothing, and a quick tap is one short step.
+
+Every touch area is at least 44 px; parts drawn smaller (the rings and the pad on a phone) get the rest as touch
+room round them.
 
 ## Not offered
 

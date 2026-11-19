@@ -15,6 +15,8 @@ interface Props {
   /** The touch height; the track takes the whole of it. */
   height: number;
   label: string;
+  /** Small light minus and plus circles (touched over 44 px) and a brighter percent: for Drive's glass card. */
+  light?: boolean;
   lessLabel: string;
   moreLabel: string;
   onChange: (v: number) => void;
@@ -22,7 +24,7 @@ interface Props {
   onStep: (v: number) => void;
 }
 
-export function SpeedSlider({ value, range, size, height, label, lessLabel, moreLabel, onChange, onRelease, onStep }: Props) {
+export function SpeedSlider({ value, range, size, height, label, light, lessLabel, moreLabel, onChange, onRelease, onStep }: Props) {
   const thumb = Math.round(height * 0.46);
   const pad = thumb / 2;
   const width = useRef(0);
@@ -62,11 +64,11 @@ export function SpeedSlider({ value, range, size, height, label, lessLabel, more
   };
 
   const f = fractionOf(value, range);
-  const button = Math.round(height * 0.8);
+  const button = light ? LIGHT_STEP : Math.round(height * 0.8);
   return (
     <View style={[styles.row, { gap: size * 0.5 }]}>
-      <Text style={[styles.label, { fontSize: size }]}>{label}</Text>
-      <StepButton glyph="M6 12 H18" size={button} label={lessLabel} onPress={() => step(-SPEED_STEP)} />
+      <Text style={[styles.label, { fontSize: light ? size * 0.78 : size }]}>{label}</Text>
+      <StepButton glyph="M6 12 H18" size={button} light={light} label={lessLabel} onPress={() => step(-SPEED_STEP)} />
       <View
         onStartShouldSetResponder={() => true}
         onMoveShouldSetResponder={() => true}
@@ -100,23 +102,33 @@ export function SpeedSlider({ value, range, size, height, label, lessLabel, more
           />
         </View>
       </View>
-      <StepButton glyph="M6 12 H18 M12 6 V18" size={button} label={moreLabel} onPress={() => step(SPEED_STEP)} />
-      <Text style={[styles.value, { fontSize: size, minWidth: size * 3 }]}>{`${value}%`}</Text>
+      <StepButton glyph="M6 12 H18 M12 6 V18" size={button} light={light} label={moreLabel} onPress={() => step(SPEED_STEP)} />
+      <Text style={[styles.value, light ? [styles.valueLight, { fontSize: size * 1.25, minWidth: size * 3.4 }] : { fontSize: size, minWidth: size * 3 }]}>
+        {`${value}%`}
+      </Text>
     </View>
   );
 }
 
-function StepButton({ glyph, size, label, onPress }: { glyph: string; size: number; label: string; onPress: () => void }) {
+/** The light minus and plus: a small drawn circle. */
+const LIGHT_STEP = 24;
+
+function StepButton({ glyph, size, label, light, onPress }: { glyph: string; size: number; label: string; light?: boolean; onPress: () => void }) {
   return (
     <Pressable
       onPress={onPress}
-      hitSlop={4}
+      hitSlop={light ? (44 - size) / 2 : 4}
       accessibilityRole="button"
       accessibilityLabel={label}
-      style={({ pressed }) => [styles.step, { width: size, height: size, borderRadius: size / 2 }, pressed && styles.pressed]}
+      style={({ pressed }) => [
+        styles.step,
+        { width: size, height: size, borderRadius: size / 2 },
+        light && styles.stepLight,
+        pressed && (light ? styles.stepLightPressed : styles.pressed),
+      ]}
     >
       <Svg width={size * 0.5} height={size * 0.5} viewBox="0 0 24 24" pointerEvents="none">
-        <Path d={glyph} stroke={mono.text} strokeWidth={2.4} fill="none" strokeLinecap="round" />
+        <Path d={glyph} stroke={mono.text} strokeWidth={light ? 2 : 2.4} fill="none" strokeLinecap="round" />
       </Svg>
     </Pressable>
   );
@@ -147,5 +159,8 @@ const styles = StyleSheet.create({
     borderColor: 'rgba(232,232,232,0.35)',
     backgroundColor: 'rgba(0,0,0,0.55)',
   },
+  stepLight: { borderWidth: 1, borderColor: 'rgba(255,255,255,0.3)', backgroundColor: 'transparent' },
+  stepLightPressed: { backgroundColor: 'rgba(255,255,255,0.16)' },
+  valueLight: { color: '#ffffff', letterSpacing: 0.5 },
   pressed: { opacity: 0.6 },
 });

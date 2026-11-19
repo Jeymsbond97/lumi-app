@@ -1,4 +1,4 @@
-// The arm and gripper buttons on Drive (lumi-wave api/server.py):
+// The arm and gripper controls of ARM SETUP on Commands (lumi-wave api/server.py):
 // - GET /arm/poses: {name: [6 joints in deg]} of the taught poses of the pose graph, the ones people saved too.
 // - GET /arm/poses/saved: the same, only the poses people saved (404 on an older robot API: nothing can be deleted).
 // - POST /arm/pose {name}: goes there along the pose graph, every joint move checked first; answers when the arm is
@@ -11,11 +11,12 @@
 // - GET /gripper/state: {closed, holding, object_in_front, gap_mm, ...}; POST /gripper/open and /gripper/close answer
 //   after the stroke (about 1.5 s) with the state after it.
 // Every POST but /arm/stop is refused with 409 while a task runs.
-import { BusyError, NeedsUpdateError, post } from './api';
+import { BusyError, NeedsUpdateError, post, type ArmState } from './api';
 import { send, type Reply } from './commands';
 import { fetchWithTimeout } from './connection';
 import type { TextKey } from './i18n';
 import { toArmSpeed, type ArmSpeed } from './speed';
+import { toTcp, type Tcp } from './armPad';
 
 /** Poses in the order the old dashboard listed them; others follow by name. */
 const POSE_ORDER = ['look', 'ready', 'carry', 'give_pre', 'give', 'rest', 'bag', 'wave_out', 'wave_start', 'wave'];
@@ -46,6 +47,44 @@ export function sortPoses(names: string[]): string[] {
 export function toPoseNames(raw: unknown): string[] {
   if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return [];
   return sortPoses(Object.keys(raw).filter((k) => Array.isArray((raw as Record<string, unknown>)[k])));
+}
+
+/** The arm has power (the gripper and saving a pose work); only an enabled arm moves (jog, poses). */
+export const armPowered = (arm: ArmState): boolean => arm === 'enabled' || arm === 'disabled';
+
+/** Why a dimmed arm control cannot act now. */
+export const armWhy = (arm: ArmState): TextKey => (armPowered(arm) ? 'driveEnableArmFirst' : 'armOff');
+
+/** ARM SETUP's free width, in text sizes, from which it is laid out as Cobo π's Manual page. */
+export const ARM_SETUP_WIDE = 48;
+/** The live arm's share of the width on a phone. */
+const COMPACT_SCENE_SHARE = 0.4;
+
+/**
+ * ARM SETUP's columns, as Cobo π's Manual page:
+ * - 'wide' (a tablet): left two thirds the 3D arm with its TCP read-out over the JOINTS / POSES panel; right third
+ *   the hand pad (Z capsule and the round X Y pad), the gripper and the speed;
+ * - 'compact' (a phone on its side, a tablet with the task card open): the 3D arm on the left, the controls in tabs
+ *   in the middle, the speed fader on the right, always in view.
+ */
+export type ArmSetupLayout =
+  | { kind: 'wide'; left: number; right: number }
+  | { kind: 'compact'; scene: number; controls: number; fader: number };
+
+export function armSetupLayout(width: number, size: number, gap: number): ArmSetupLayout {
+  if (width >= size * ARM_SETUP_WIDE) {
+    const right = Math.floor((width - gap) / 3);
+    return { kind: 'wide', left: Math.floor(width - gap - right), right };
+  }
+  const scene = Math.floor(width * COMPACT_SCENE_SHARE);
+  const fader = Math.max(56, Math.round(size * 4.4));
+  return { kind: 'compact', scene, fader, controls: Math.floor(width - scene - fader - 2 * gap) };
+}
+
+/** The poses people saved first (they can be deleted), then Lumi's own; the robot's order kept in each. */
+export function splitPoses(poses: string[], saved: string[] | null): { saved: string[]; builtIn: string[] } {
+  if (!saved) return { saved: [], builtIn: poses };
+  return { saved: poses.filter((p) => saved.includes(p)), builtIn: poses.filter((p) => !saved.includes(p)) };
 }
 
 export type GripperState = 'open' | 'closed' | 'holding';
@@ -131,3 +170,10 @@ export async function getGripper(baseUrl: string, timeoutMs = 3000): Promise<Gri
 
 export const openGripper = (baseUrl: string) => orBusy(post(baseUrl, '/gripper/open', undefined, 8000));
 export const closeGripper = (baseUrl: string) => orBusy(post(baseUrl, '/gripper/close', undefined, 8000));
+
+/** The hand's place and turn (GET /arm/state `tcp`), for the read-out under the 3D arm; null when it cannot say. */
+export async function getArmTcp(baseUrl: string, timeoutMs = 2000): Promise<Tcp | null> {
+  const res = await fetchWithTimeout(`${baseUrl}/arm/state`, timeoutMs);
+  if (!res.ok) return null;
+  return toTcp(await res.json());
+}

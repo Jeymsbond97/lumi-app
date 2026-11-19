@@ -1,7 +1,7 @@
-// The Drive screen's two speeds (lib/speed):
-// - the arm's is the robot's global arm speed: read with GET /arm/speed while the screen shows, set with POST /arm/speed
+// The two speed sliders (lib/speed):
+// - the arm's (Commands, ARM SETUP) is the robot's global arm speed: read with GET /arm/speed while the screen shows, set with POST /arm/speed
 //   when the finger lifts or 300 ms after the last minus / plus tap. An older robot API (404) has none: 'old'.
-// - the body's is the app's own, kept in AsyncStorage.
+// - the body's (Drive) is the app's own, kept in AsyncStorage.
 import { useCallback, useEffect, useRef, useState } from 'react';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { NeedsUpdateError } from '../lib/api';

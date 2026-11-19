@@ -1,4 +1,9 @@
 import {
+  faderValue,
+  tickFraction,
+  tickLabels,
+  tickStops,
+  tickValue,
   ARM_SPEED_FALLBACK,
   BODY_SPEED_RANGE,
   clampPercent,
@@ -100,5 +105,42 @@ describe('toStoredPercent', () => {
     expect(toStoredPercent(null, BODY_SPEED_RANGE)).toBeNull();
     expect(toStoredPercent('', BODY_SPEED_RANGE)).toBeNull();
     expect(toStoredPercent('fast', BODY_SPEED_RANGE)).toBeNull();
+  });
+});
+
+describe('the upright fader', () => {
+  it('goes up when the finger goes up, over the whole range on the fader height', () => {
+    expect(faderValue(50, -50, 95, BODY_SPEED_RANGE)).toBe(100);
+    expect(faderValue(50, 19, 95, BODY_SPEED_RANGE)).toBe(31);
+    expect(faderValue(50, 0, 0, BODY_SPEED_RANGE)).toBe(50);
+  });
+});
+
+describe('the ticked speed scale', () => {
+  const full = { min: 1, max: 100 };
+  it('puts the ticks evenly along the track', () => {
+    expect(tickLabels(full)).toEqual([
+      { value: 1, at: 0 },
+      { value: 5, at: 0.25 },
+      { value: 20, at: 0.5 },
+      { value: 50, at: 0.75 },
+      { value: 100, at: 1 },
+    ]);
+  });
+
+  it('runs linearly between two ticks, and back', () => {
+    expect(tickFraction(35, full)).toBeCloseTo(0.625);
+    expect(tickValue(0.625, full)).toBe(35);
+    expect(tickValue(0, full)).toBe(1);
+    expect(tickValue(1, full)).toBe(100);
+  });
+
+  it('labels only the ticks inside the robot range, with its ends as stops', () => {
+    const r = { min: 10, max: 150 };
+    expect(tickStops(r)).toEqual([10, 20, 50, 100, 150]);
+    expect(tickLabels(r).map((x) => x.value)).toEqual([20, 50, 100]);
+    expect(tickFraction(10, r)).toBe(0);
+    expect(tickFraction(150, r)).toBe(1);
+    expect(tickValue(tickFraction(77, r), r)).toBe(77);
   });
 });

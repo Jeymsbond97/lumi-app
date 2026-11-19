@@ -225,18 +225,6 @@ export function toMarkers(raw: unknown): string[] {
   return Array.isArray(m) ? m.filter((x): x is string => typeof x === 'string' && x.length > 0) : [];
 }
 
-// the dashboard's order; poses taught later follow by name
-const POSE_ORDER = ['look', 'carry', 'give', 'ready', 'rest', 'bag', 'wave_out', 'wave_start', 'wave'];
-
-/** The arm's taught poses (GET /arm/poses: {name: joints}). */
-export function toPoses(raw: unknown): string[] {
-  if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return [];
-  const rank = (n: string) => (POSE_ORDER.indexOf(n) + 1 || 99);
-  return Object.keys(raw)
-    .filter((k) => Array.isArray((raw as Record<string, unknown>)[k]))
-    .sort((a, b) => rank(a) - rank(b) || a.localeCompare(b));
-}
-
 export interface Song {
   id: string;
   title: string;
@@ -318,9 +306,6 @@ export const placeRequest: Request = { path: '/tasks/place', body: { on: null } 
 export const giveRequest: Request = { path: '/tasks/give' };
 export const releaseRequest: Request = { path: '/tasks/release' };
 export const waveRequest: Request = { path: '/arm/wave', timeoutMs: 90000 };
-/** No speed: the robot's global arm speed (/arm/speed) applies. */
-export const poseRequest = (name: string): Request => ({ path: '/arm/pose', body: { name }, timeoutMs: 90000 });
-export const gripperRequest = (open: boolean): Request => ({ path: open ? '/gripper/open' : '/gripper/close', timeoutMs: 10000 });
 export const comeRequest = commandRequest('come here');
 export const followRequest = commandRequest('follow me');
 export const goRequest = (marker: string): Request => ({ path: '/agv/go', body: { marker } });

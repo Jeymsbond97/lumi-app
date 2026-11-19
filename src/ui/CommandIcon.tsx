@@ -8,9 +8,6 @@ export type CommandIconName =
   | 'receive'
   | 'aside'
   | 'wave'
-  | 'pose'
-  | 'gripOpen'
-  | 'gripClose'
   | 'come'
   | 'follow'
   | 'goto'
@@ -61,16 +58,6 @@ export function CommandIcon({ name, size, color }: { name: CommandIconName; size
           {...p}
         />
       )}
-      {name === 'pose' && (
-        <>
-          <Path d="M3 21h8M7 21v-5l6-6 5 3" {...p} />
-          <Circle cx={7} cy={16} r={1.6} {...p} />
-          <Circle cx={13} cy={10} r={1.6} {...p} />
-          <Path d="M18 13l2.5-2M18 13l2 3" {...p} />
-        </>
-      )}
-      {name === 'gripOpen' && <Path d="M8 3v6l-4 7M16 3v6l4 7M8 9h8" {...p} />}
-      {name === 'gripClose' && <Path d="M8 3v6l3 7M16 3v6l-3 7M8 9h8" {...p} />}
       {(name === 'come' || name === 'follow') && (
         <>
           <Circle cx={18} cy={5.5} r={2} {...p} />
