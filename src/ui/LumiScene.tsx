@@ -1,8 +1,10 @@
 // The 3D Lumi (web/home3d.html, bundled into scene/sceneHtml.ts by `npm run scene`) in a WebView, fed a SceneState:
 // Home shows the whole robot, Commands' ARM SETUP the live arm (its `view`). Each mount is its own page, so it is
-// mounted only while it is shown (the phone has little memory).
+// mounted only while it is shown (the phone has little memory). With `background` the view shows that colour from the
+// start and fades the scene in once the page has drawn its first frame with Lumi in it (no black flash).
 import { useCallback, useEffect, useMemo, useRef, useState, type ComponentType, type Ref } from 'react';
-import { Platform, StyleSheet } from 'react-native';
+import { Platform, StyleSheet, View } from 'react-native';
+import Animated, { useAnimatedStyle, useSharedValue, withTiming } from 'react-native-reanimated';
 import { Asset } from 'expo-asset';
 import { WebView, type WebViewMessageEvent, type WebViewProps } from 'react-native-webview';
 import { SCENE_HTML } from '../scene/sceneHtml';
@@ -27,7 +29,8 @@ interface ModelSource {
 function sceneHtml(glbUri: string, initial: SceneState | null): string {
   const json = (v: unknown) => JSON.stringify(v).replace(/</g, '\\u003c');
   const first = initial ? `window.LUMI_STATE=${json(initial)};` : '';
-  const settings = `<script>document.documentElement.classList.add('in-app');window.LUMI_GLB=${json(glbUri)};${first}</script>`;
+  const armView = initial?.view === 'arm' ? "document.documentElement.classList.add('arm-view');" : '';
+  const settings = `<script>document.documentElement.classList.add('in-app');${armView}window.LUMI_GLB=${json(glbUri)};${first}</script>`;
   return SCENE_HTML.replace('<head>', `<head>${settings}`);
 }
 
@@ -54,15 +57,21 @@ export function LumiScene({
   state,
   onReady,
   initial,
+  background,
 }: {
   state: SceneState | null;
   onReady?: () => void;
   /** The state the page starts in, before its first frame (ARM SETUP's arm view: no flash of the whole robot). */
   initial?: SceneState;
+  /** The colour shown until the scene has drawn its first frame, then the scene fades in over it. */
+  background?: string;
 }) {
   const web = useRef<WebView>(null);
   const [model, setModel] = useState<ModelSource | null>(null);
   const [ready, setReady] = useState(false);
+  // without a background colour (Home: its own loading view covers it) the scene shows at once
+  const shown = useSharedValue(background ? 0 : 1);
+  const fade = useAnimatedStyle(() => ({ opacity: shown.get() }));
   // the page is made once per model; its first state is the one given when it was mounted
   const [first] = useState(() => initial ?? null);
   const html = useMemo(() => (model ? sceneHtml(model.glbUri, first) : ''), [model, first]);
@@ -103,11 +112,12 @@ export function LumiScene({
       if (__DEV__ && msg.type === 'ready') console.log(`scene ready after ${msg.ms} ms`);
       if (__DEV__ && msg.type === 'perf') console.log(`scene ${msg.fps} fps at ${msg.pixelRatio}x`);
       if (msg.type === 'ready') setReady(true);
+      if (msg.type === 'drawn') shown.set(withTiming(1, { duration: 200 }));
       if (msg.type === 'error') console.warn('scene', msg.message);
     } catch {
       // not ours
     }
-  }, []);
+  }, [shown]);
   const onMessage = (e: WebViewMessageEvent) => handle(e.nativeEvent.data);
 
   useEffect(() => {
@@ -121,36 +131,45 @@ export function LumiScene({
     return () => globalThis.removeEventListener?.('message', listen);
   }, [handle]);
 
-  if (!model) return null;
+  const bg = background ?? colors.bg;
+  if (!model) return <View style={[styles.web, { backgroundColor: bg }]} />;
   if (IS_WEB) {
     return (
-      <iframe
-        ref={setFrame}
-        srcDoc={html.replace('<head>', `<head>${WEB_BRIDGE}`)}
-        style={{ border: 0, width: '100%', height: '100%', background: colors.bg }}
-      />
+      <View style={[styles.web, { backgroundColor: bg }]}>
+        <Animated.View style={[styles.web, fade]}>
+          <iframe
+            ref={setFrame}
+            srcDoc={html.replace('<head>', `<head>${WEB_BRIDGE}`)}
+            style={{ border: 0, width: '100%', height: '100%', background: bg }}
+          />
+        </Animated.View>
+      </View>
     );
   }
   return (
-    <SceneView
-      ref={web}
-      style={styles.web}
-      originWhitelist={['*']}
-      source={{ html, baseUrl: model.baseUrl }}
-      onMessage={onMessage}
-      allowFileAccess
-      allowFileAccessFromFileURLs
-      allowingReadAccessToURL={model.baseUrl}
-      javaScriptEnabled
-      scrollEnabled={false}
-      bounces={false}
-      overScrollMode="never"
-      setBuiltInZoomControls={false}
-      mixedContentMode="always"
-    />
+    <View style={[styles.web, { backgroundColor: bg }]}>
+      <Animated.View style={[styles.web, fade]}>
+        <SceneView
+          ref={web}
+          style={[styles.web, { backgroundColor: bg }]}
+          originWhitelist={['*']}
+          source={{ html, baseUrl: model.baseUrl }}
+          onMessage={onMessage}
+          allowFileAccess
+          allowFileAccessFromFileURLs
+          allowingReadAccessToURL={model.baseUrl}
+          javaScriptEnabled
+          scrollEnabled={false}
+          bounces={false}
+          overScrollMode="never"
+          setBuiltInZoomControls={false}
+          mixedContentMode="always"
+        />
+      </Animated.View>
+    </View>
   );
 }
 
 const styles = StyleSheet.create({
-  web: { flex: 1, backgroundColor: colors.bg },
+  web: { flex: 1 },
 });

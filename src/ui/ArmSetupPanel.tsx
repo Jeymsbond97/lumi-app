@@ -59,6 +59,8 @@ type Tab = 'joints' | 'poses' | 'move';
 
 /** The scene's first state when the robot has not said anything yet: the arm view straight away. */
 const ARM_VIEW: SceneState = { view: 'arm', armState: 'off', charging: false };
+/** The simulation's grey (web/home3d.html SIM_BG): the 3D card's colour from the first frame, the scene fades in over it. */
+const SIM_GREY = '#767b82';
 
 /** How a tap went, for the Commands status line: a text of the app (key) or the robot's own reason. */
 export interface ArmReport {
@@ -367,7 +369,7 @@ export function ArmSetupPanel({
   const parts = tcp ? tcpParts(tcp) : null;
   const sim = (
     <View style={[styles.card, styles.sim, wide ? styles.simWide : { width: (lay as { scene: number }).scene }]}>
-      <View style={styles.grow}>{focused && <LumiScene state={scene} initial={scene ?? ARM_VIEW} />}</View>
+      <View style={styles.grow}>{focused && <LumiScene state={scene} initial={scene ?? ARM_VIEW} background={SIM_GREY} />}</View>
       {!wide && (
         <Pressable
           onPress={stopArm}
@@ -735,7 +737,7 @@ const styles = StyleSheet.create({
   columns: { flex: 1, flexDirection: 'row', alignItems: 'stretch' },
   centre: { alignItems: 'center', justifyContent: 'center' },
   divider: { borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: 'rgba(255,255,255,0.12)' },
-  sim: { overflow: 'hidden', backgroundColor: '#767b82' },
+  sim: { overflow: 'hidden', backgroundColor: SIM_GREY },
   simWide: { flex: 1.9 },
   jointsWide: { flex: 1 },
   stopCorner: { position: 'absolute', top: 6, right: 6, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 0 },
