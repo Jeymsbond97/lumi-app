@@ -1,4 +1,4 @@
-import { toSceneState } from '../sceneState';
+import { armSceneState, toSceneState } from '../sceneState';
 
 describe('toSceneState', () => {
   it('turns degrees into radians and millimetres into metres', () => {
@@ -28,5 +28,24 @@ describe('toSceneState', () => {
   it('leaves out parts that did not answer so the robot keeps its last pose', () => {
     const s = toSceneState({ battery: 50, charging: true, status: 'statusReady', armState: 'off', armSilent: false, pose: null, body: null }, null);
     expect(s).toEqual({ armState: 'off', charging: true });
+  });
+});
+
+describe('armSceneState', () => {
+  it('is the robot state in the arm view, with the live joints', () => {
+    const s = armSceneState(
+      { battery: 50, charging: true, status: 'statusReady', armState: 'enabled', armSilent: false, pose: null, body: null },
+      [90, 0, 0, 0, 0, 0],
+    );
+    expect(s.view).toBe('arm');
+    expect(s.armState).toBe('enabled');
+    expect(s.arm?.[0]).toBeCloseTo(Math.PI / 2);
+    // the same joints as Home: the model's angles are the controller's
+    expect(s.arm?.[2]).toBeCloseTo(0);
+  });
+
+  it('leaves the home view to Home', () => {
+    const s = toSceneState({ battery: 50, charging: false, status: 'statusReady', armState: 'off', armSilent: false, pose: null, body: null }, null);
+    expect(s.view).toBeUndefined();
   });
 });

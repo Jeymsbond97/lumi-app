@@ -89,23 +89,54 @@ function homeDistance() {
   return ROBOT_H / fill / (2 * Math.tan(THREE.MathUtils.degToRad(camera.fov / 2)));
 }
 const HOME_TARGET = new THREE.Vector3(0, 0.78, 0);
+// two views, chosen by the app through setState({view}): 'home', the whole robot on its stage, and 'arm' (Commands,
+// ARM SETUP), a teach pendant's simulation: the arm alone, standing upright on a grid with XYZ axes at its base
+let view = 'home';
+const viewTarget = HOME_TARGET.clone();
+let viewDistance = 0;
+// the arm view, as Cobo π frames it: a little from above and the front, looking slightly down at the arm, which
+// fills about two thirds of the picture's height (its usual poses, from the floor grid to about half a metre above
+// the mount). The person's own view then stays: no gliding back, no new framing on new joints; double tap resets.
+const ARM_DIR = new THREE.Vector3(0.62, 0.36, 1).normalize();
+const ARM_TARGET = new THREE.Vector3(0.16, 0.1, 0);
+const ARM_HALF_VIEW = 0.55;                        // half the height (m) the picture shows round the target
+function armDistance() {
+  const vFov = THREE.MathUtils.degToRad(camera.fov);
+  const hFov = 2 * Math.atan(Math.tan(vFov / 2) * camera.aspect);
+  return ARM_HALF_VIEW / Math.tan(Math.min(vFov, hFov) / 2);
+}
 function frameHome() {
-  const d = homeDistance();
-  controls.target.copy(HOME_TARGET);
-  camera.position.copy(controls.target).addScaledVector(HOME_DIR, d);
-  controls.minDistance = d * 0.45;
-  controls.maxDistance = d * 1.5;
+  let d, dir = HOME_DIR;
+  const arm = view === 'arm';
+  if (arm) {
+    viewTarget.copy(ARM_TARGET);
+    dir = ARM_DIR;
+    d = armDistance();
+  } else {
+    viewTarget.copy(HOME_TARGET);
+    d = homeDistance();
+  }
+  viewDistance = d;
+  controls.target.copy(viewTarget);
+  camera.position.copy(controls.target).addScaledVector(dir, d);
+  // Home: a turn round the robot within limits; the arm view: free orbit, zoom and pan, as a simulator
+  controls.minDistance = d * (arm ? 0.2 : 0.45);
+  controls.maxDistance = d * (arm ? 3 : 1.5);
+  controls.enablePan = arm;
+  controls.minPolarAngle = arm ? 0.01 * Math.PI : POLAR_MIN;
+  controls.maxPolarAngle = arm ? 0.62 * Math.PI : POLAR_MAX;
+  zoomed = false;
   controls.update();
 }
-frameHome();
 // when zoomed in, sliding one finger up or down moves the view along the robot
-// (finger up goes towards the head); at the full view it tilts as usual
-const POLAR_MIN = 0.12 * Math.PI, POLAR_MAX = 0.56 * Math.PI;
-let zoomed = false, slideY = null;
-function isZoomed() { return camera.position.distanceTo(controls.target) < homeDistance() * 0.85; }
+// (finger up goes towards the head); at the full view it tilts as usual (Home only)
+var POLAR_MIN = 0.12 * Math.PI, POLAR_MAX = 0.56 * Math.PI;
+var zoomed = false, slideY = null;
+frameHome();
+function isZoomed() { return camera.position.distanceTo(controls.target) < viewDistance * 0.85; }
 canvas.addEventListener('pointerdown', e => { slideY = e.clientY; });
 canvas.addEventListener('pointermove', e => {
-  if (slideY === null || down.size !== 1 || !zoomed) { slideY = e.clientY; return; }
+  if (view !== 'home' || slideY === null || down.size !== 1 || !zoomed) { slideY = e.clientY; return; }
   const dist = camera.position.distanceTo(controls.target);
   const worldPerPx = 2 * dist * Math.tan(THREE.MathUtils.degToRad(camera.fov / 2)) / innerHeight;
   let dy = -(e.clientY - slideY) * worldPerPx;
@@ -127,7 +158,7 @@ function updateView() {
   // zooming back out glides the view back to the whole robot
   if (!z) {
     const before = t.clone();
-    t.lerp(HOME_TARGET, 0.12);
+    t.lerp(viewTarget, 0.12);
     camera.position.add(t.clone().sub(before));
   }
 }
@@ -262,7 +293,7 @@ const city = (() => {
   }
   geo.setAttribute('aSeed', new THREE.InstancedBufferAttribute(seeds, 1));
   scene.add(mesh);
-  return mat;
+  return { mat, mesh };
 })();
 
 // wireframe landscape as a ring round the stage, rolling slowly; seen from every side
@@ -372,6 +403,89 @@ const pMat = new THREE.ShaderMaterial({
 });
 stage.add(new THREE.Points(pGeo, pMat));
 
+// ---------------------------------------------------------------- the arm view's simulation ground
+const SIM_BG = new THREE.Color(0x767b82);
+const ARM_FLOOR = -0.26;                           // the floor grid, m under the arm's mount         // a teach pendant's mid grey
+const sim = new THREE.Group(); sim.visible = false; scene.add(sim);
+const simGrid = new THREE.Mesh(new THREE.PlaneGeometry(12, 12), new THREE.ShaderMaterial({
+  transparent: true, depthWrite: false, extensions: { derivatives: true },
+  vertexShader: `varying vec2 vP; void main(){ vP=position.xy; gl_Position=projectionMatrix*modelViewMatrix*vec4(position,1.); }`,
+  fragmentShader: `varying vec2 vP;
+    float grid(vec2 p,float s,float w){ vec2 g=abs(fract(p/s-0.5)-0.5)/(fwidth(p/s)*w); return 1.0-min(min(g.x,g.y),1.0); }
+    void main(){
+      float r=length(vP);
+      float minor=grid(vP,0.05,1.0), major=grid(vP,0.25,1.5);
+      float fade=smoothstep(4.5,0.8,r);
+      float a=max(minor*0.28,major*0.75)*fade;
+      gl_FragColor=vec4(vec3(1.0),a);
+    }`
+}));
+simGrid.rotation.x = -Math.PI / 2; sim.add(simGrid);
+const simShadow = new THREE.Mesh(new THREE.PlaneGeometry(4, 4), new THREE.ShadowMaterial({ opacity: 0.32 }));
+simShadow.rotation.x = -Math.PI / 2; simShadow.receiveShadow = true; sim.add(simShadow);
+simGrid.position.y = ARM_FLOOR + 0.0005; simShadow.position.y = ARM_FLOOR;
+// the base triad in the same colours and directions as the gizmo below (X red, Y green, Z blue up)
+const simAxes = new THREE.Group(); sim.add(simAxes);   // at the controller's base origin
+for (const [dir, color] of [[[1, 0, 0], 0xff5a52], [[0, 0, -1], 0x5ee07a], [[0, 1, 0], 0x5aa8ff]]) {
+  const line = new THREE.Line(new THREE.BufferGeometry().setFromPoints([new THREE.Vector3(), new THREE.Vector3(...dir).multiplyScalar(0.14)]),
+    new THREE.LineBasicMaterial({ color, depthTest: false }));
+  line.renderOrder = 2; simAxes.add(line);
+}
+// the arm view is drawn in the controller's own frame (Cobo π, GET /arm/state's tcp), z up: the scene's x is its x,
+// the scene's y its z and the scene's -z its y. On Lumi the arm is mounted on its side, J1 level along x, as here: the
+// model's arm frame turned a quarter turn about z and 30.4 mm along x (src/lib/armFrame.ts, fitted to 13 controller
+// readings within about 1 mm). The floor grid lies close under the arm, as in Cobo π: under the lowest point its usual
+// poses reach (a pose that goes lower passes through the grid's lines), with a post from it up to the mount plate.
+const armRig = new THREE.Group(); sim.add(armRig);
+const ARM_MOUNT_POS = new THREE.Vector3(0.0304, 0.0001, 0.0004);
+const ARM_MOUNT_TURN = new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 0, 1), -Math.PI / 2);
+// a plain plate where Lumi's torso holds the arm, so it does not hang in the air
+const mountPlate = new THREE.Mesh(new THREE.CylinderGeometry(0.075, 0.075, 0.014, 48),
+  new THREE.MeshStandardMaterial({ color: 0x4a4f56, roughness: 0.7, metalness: 0.2 }));
+mountPlate.rotation.z = Math.PI / 2; mountPlate.position.x = -0.007; mountPlate.castShadow = true; armRig.add(mountPlate);
+const mountPost = new THREE.Mesh(new THREE.BoxGeometry(0.05, 0.075 - ARM_FLOOR, 0.11),
+  new THREE.MeshStandardMaterial({ color: 0x4a4f56, roughness: 0.75, metalness: 0.15 }));
+mountPost.position.set(-0.039, (ARM_FLOOR + 0.075) / 2, 0); mountPost.castShadow = mountPost.receiveShadow = true; armRig.add(mountPost);
+// RGB triads: one at the base (above), one at the flange, put on the tool link once the model is in
+const flangeAxes = new THREE.AxesHelper(0.07); flangeAxes.material.depthTest = false; flangeAxes.renderOrder = 3;
+flangeAxes.visible = false;
+// the orientation gizmo, bottom right of the arm view: X, Y (up in the scene, the arm's Z) and Z on a dark disc, turned
+// with the camera; drawn in its own little viewport after the scene
+const gizmo = new THREE.Scene();
+const gizmoCam = new THREE.OrthographicCamera(-1.5, 1.5, 1.5, -1.5, 0.1, 10);
+const gizmoDisc = new THREE.Mesh(new THREE.CircleGeometry(1.45, 48), new THREE.MeshBasicMaterial({ color: 0x24282e, transparent: true, opacity: 0.88, depthTest: false }));
+gizmoDisc.renderOrder = 0; gizmo.add(gizmoDisc);
+const gizmoAxes = new THREE.Group(); gizmo.add(gizmoAxes);
+function gizmoLabel(text, color) {
+  const c = document.createElement('canvas'); c.width = c.height = 64;
+  const g = c.getContext('2d'); g.fillStyle = color; g.font = 'bold 44px sans-serif'; g.textAlign = 'center'; g.textBaseline = 'middle';
+  g.fillText(text, 32, 34);
+  const sp = new THREE.Sprite(new THREE.SpriteMaterial({ map: new THREE.CanvasTexture(c), depthTest: false }));
+  sp.scale.setScalar(0.55); sp.renderOrder = 2; return sp;
+}
+// the arm's own frame: X forward, Y left, Z up (the scene's y is up)
+for (const [dir, color, name] of [[[1, 0, 0], '#ff5a52', 'X'], [[0, 0, -1], '#5ee07a', 'Y'], [[0, 1, 0], '#5aa8ff', 'Z']]) {
+  const v = new THREE.Vector3(...dir);
+  const line = new THREE.Line(new THREE.BufferGeometry().setFromPoints([new THREE.Vector3(), v.clone().multiplyScalar(0.8)]),
+    new THREE.LineBasicMaterial({ color, depthTest: false }));
+  line.renderOrder = 1; gizmoAxes.add(line);
+  const label = gizmoLabel(name, color); label.position.copy(v).multiplyScalar(1.08); gizmoAxes.add(label);
+}
+function drawGizmo() {
+  const size = Math.round(THREE.MathUtils.clamp(Math.min(innerWidth, innerHeight) * 0.22, 56, 104));
+  gizmoCam.position.copy(camDir).multiplyScalar(-4);
+  gizmoCam.up.copy(camera.up); gizmoCam.lookAt(0, 0, 0);
+  gizmoDisc.quaternion.copy(gizmoCam.quaternion);
+  renderer.autoClear = false;
+  renderer.setScissorTest(true);
+  renderer.setViewport(innerWidth - size - 8, 8, size, size);
+  renderer.setScissor(innerWidth - size - 8, 8, size, size);
+  renderer.clearDepth();
+  renderer.render(gizmo, gizmoCam);
+  renderer.setScissorTest(false);
+  renderer.setViewport(0, 0, innerWidth, innerHeight);
+  renderer.autoClear = true;
+}
 // ---------------------------------------------------------------- robot
 let robot, J = {}, lamps = [], armRing = null;
 new GLTFLoader().setMeshoptDecoder(MeshoptDecoder).load(window.LUMI_GLB || 'lumi.glb', g => {
@@ -392,7 +506,10 @@ new GLTFLoader().setMeshoptDecoder(MeshoptDecoder).load(window.LUMI_GLB || 'lumi
     }
   });
   scene.add(robot);
+  measureArm();
+  placeArm();
   applyState();
+  frameHome();
   renderer.shadowMap.needsUpdate = true;
   window.robot = robot; window.J = J;
   window.ReactNativeWebView?.postMessage(JSON.stringify({ type: 'ready', ms: Math.round(performance.now()) }));
@@ -484,8 +601,48 @@ function applyHud() {
   document.getElementById('vBatt').textContent = b == null ? '' : Math.round(b) + '%';
   document.getElementById('vStatus').textContent = state.status || 'Ready';
 }
-window.lumi = { setState(s) { Object.assign(state, s); charging = !!state.charging; applyState(); applyHud(); }, state };
+// the arm alone: its base joint moves from Lumi's torso onto the grid, upright (J1 turns about the world's up), and
+// back again for Home; the rest of Lumi and Home's scenery are hidden meanwhile
+let armHome = null;                               // where the arm sits on Lumi: {parent, position, quaternion}
+const ARM_LOGOS = ['logo_link_a1', 'logo_link_a2', 'logo_link_a4'];
+function measureArm() {
+  const base = J.l_a1 && J.l_a1.parent;
+  if (!base) return;
+  armHome = { parent: base.parent, position: base.position.clone(), quaternion: base.quaternion.clone() };
+  const tool = scene.getObjectByName('link_at');
+  if (tool) tool.add(flangeAxes);
+}
+function placeArm() {
+  const base = J.l_a1 && J.l_a1.parent;
+  if (!base || !armHome) return;
+  const alone = view === 'arm';
+  if (alone && base.parent !== armRig) {
+    armRig.add(base); base.position.copy(ARM_MOUNT_POS); base.quaternion.copy(ARM_MOUNT_TURN);
+  } else if (!alone && base.parent !== armHome.parent) {
+    armHome.parent.add(base); base.position.copy(armHome.position); base.quaternion.copy(armHome.quaternion);
+  }
+  robot.visible = !alone;
+  flangeAxes.visible = alone;
+  for (const n of ARM_LOGOS) { const o = scene.getObjectByName(n); if (o) o.visible = !alone; }
+  base.updateMatrixWorld(true);
+}
+function applyView() {
+  const next = state.view === 'arm' ? 'arm' : 'home';
+  if (next === view) return;
+  view = next;
+  const home = view === 'home';
+  for (const o of [sky, planetRig, city.mesh, terrain, floor, stage]) o.visible = home;
+  sim.visible = !home;
+  scene.background = home ? null : SIM_BG;
+  placeArm();
+  frameHome();
+  renderer.shadowMap.needsUpdate = true;
+}
+window.lumi = { setState(s) { Object.assign(state, s); charging = !!state.charging; applyView(); applyState(); applyHud(); }, state };
 try { if (location.hash.length > 1) Object.assign(state, JSON.parse(decodeURIComponent(location.hash.slice(1)))); } catch (e) {}
+// the app's first state, written into the page before it runs (ui/LumiScene `initial`): ARM SETUP opens in its view
+if (window.LUMI_STATE) Object.assign(state, window.LUMI_STATE);
+applyView();
 applyHud();
 
 const clock = new THREE.Clock();
@@ -495,7 +652,8 @@ function resize() {
   renderer.setSize(w, h, false);
   camera.aspect = w / h; camera.updateProjectionMatrix();
   // reframe only when the screen really changes (turning the phone), not when browser bars slide
-  if (Math.abs(h - lastH) > 120 || Math.abs(w - lastW) > 120) frameHome();
+  // (the arm view keeps the person's own view)
+  if (view === 'home' && (Math.abs(h - lastH) > 120 || Math.abs(w - lastW) > 120)) frameHome();
   lastW = w; lastH = h;
   pMat.uniforms.uPx.value = renderer.getPixelRatio() * h / 900;
 }
@@ -522,7 +680,7 @@ renderer.setAnimationLoop(() => {
   adaptQuality();
   glideStep(performance.now());
   const t = clock.getElapsedTime();
-  for (const m of [sky.material, terrainMat, floorMat, hudMat, beam.material, pMat, city, planet.material]) m.uniforms.uTime.value = t;
+  for (const m of [sky.material, terrainMat, floorMat, hudMat, beam.material, pMat, city.mat, planet.material]) m.uniforms.uTime.value = t;
   hudMat.uniforms.uCharge.value = THREE.MathUtils.lerp(hudMat.uniforms.uCharge.value, charging ? 1 : 0, 0.05);
   // the planet rig follows the view round, so the planet stays in the sky behind the robot
   camera.getWorldDirection(camDir);
@@ -532,9 +690,10 @@ renderer.setAnimationLoop(() => {
   lip.material.color.setRGB(0.35, 1.6 + 0.3 * Math.sin(t * 2), 2.0);
   const lampOn = charging ? 0.1 + 1.6 * Math.pow(0.5 + 0.5 * Math.sin(t * 2.6), 2) : 1.5;
   for (const m of lamps) m.emissiveIntensity = lampOn;
-  updateView();
+  if (view === 'home') updateView();   // Home glides back to the whole robot; the arm view stays where it was left
   controls.update();
   renderer.render(scene, camera);
+  if (view === 'arm') drawGizmo();
 });
 </script>
 </body>

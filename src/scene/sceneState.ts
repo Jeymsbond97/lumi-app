@@ -9,7 +9,11 @@ export interface SceneState {
   arm?: number[]; // l_a1..l_a6
   armState: ArmState;
   charging: boolean;
+  /** 'home': the whole robot on its stage (default); 'arm': closer on the arm, no scenery (Commands, ARM SETUP). */
+  view?: SceneView;
 }
+
+export type SceneView = 'home' | 'arm';
 
 const rad = (deg: number) => (deg * Math.PI) / 180;
 
@@ -31,3 +35,13 @@ export function toSceneState(status: RobotStatus, armJointsDeg: number[] | null)
   if (armJointsDeg) s.arm = armJointsDeg.map(rad);
   return s;
 }
+
+/**
+ * ARM SETUP's live arm: the robot's state in the scene's arm view. The joints go to the model as on Home: the model's
+ * angles are the controller's (checked against 13 controller readings, lib/armFrame); the arm view only places the
+ * arm alone in the controller's frame.
+ */
+export const armSceneState = (status: RobotStatus, armJointsDeg: number[] | null): SceneState => ({
+  ...toSceneState(status, armJointsDeg),
+  view: 'arm',
+});
