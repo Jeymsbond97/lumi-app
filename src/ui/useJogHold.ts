@@ -1,6 +1,6 @@
-// The Drive screen's hold-to-move loop (lib/jog) tied to the screen: it ends when the screen is left (Tabs keep the
-// screen alive, so leaving it is a blur, not an unmount), when the app leaves the foreground, on STOP, and when the
-// screen goes away. A failed call or a failed step ends it too and says why.
+// The hold-to-move loop (lib/jog) of Drive and of Commands' ARM SETUP tied to the screen: it ends when the screen is
+// left (Tabs keep the screen alive, so leaving it is a blur, not an unmount), when the app leaves the foreground, on
+// STOP, and when the screen or the panel goes away. A failed call or a failed step ends it too and says why.
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { AppState } from 'react-native';
 import { useIsFocused } from 'expo-router';
@@ -47,6 +47,10 @@ export function useJogHold(onNote: (text: TextKey) => void): JogControl {
       onFail: (why, detail) => {
         if (__DEV__ && detail) console.warn('jog', detail);
         note.current(FAILURE_TEXT[why]);
+      },
+      onWarn: (detail) => {
+        if (__DEV__) console.warn('jog step', detail);
+        note.current('driveMoveFailed');
       },
       onChange: setHeld,
     });
