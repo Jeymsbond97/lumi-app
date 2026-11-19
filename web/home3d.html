@@ -22,6 +22,8 @@
   .hint{position:fixed;right:calc(24px + env(safe-area-inset-right));bottom:calc(18px + env(safe-area-inset-bottom));font-size:clamp(10px,1.7vh,15px);color:#9fb0bb;pointer-events:none;display:flex;gap:1.4em;padding:.45em 1em;border-radius:999px;background:rgba(2,6,12,.55);backdrop-filter:blur(6px);-webkit-backdrop-filter:blur(6px)}
   /* inside the app these words are drawn natively, in the chosen language */
   .in-app .hud,.in-app .live,.in-app .hint{display:none}
+  /* ARM SETUP: the simulation's grey from the first paint, never the dark sky (LumiScene sets the class) */
+  .arm-view,.arm-view body{background:#767b82}
   #err{position:fixed;inset:auto 32px 80px auto;color:#ff7b7b;font-size:12px;max-width:40ch}
 </style>
 <script type="importmap">
@@ -97,7 +99,9 @@ let viewDistance = 0;
 // the arm view, as Cobo π frames it: a little from above and the front, looking slightly down at the arm, which
 // fills about two thirds of the picture's height (its usual poses, from the floor grid to about half a metre above
 // the mount). The person's own view then stays: no gliding back, no new framing on new joints; double tap resets.
-const ARM_DIR = new THREE.Vector3(0.62, 0.36, 1).normalize();
+// from the same side as Home's camera (HOME_DIR seen in the controller frame, which is Home's turned half round):
+// Lumi's front, the arm on the mount's left on screen
+const ARM_DIR = new THREE.Vector3(-0.4, 0.36, -1).normalize();
 const ARM_TARGET = new THREE.Vector3(0.16, 0.1, 0);
 const ARM_HALF_VIEW = 0.55;                        // half the height (m) the picture shows round the target
 function armDistance() {
@@ -660,6 +664,7 @@ function resize() {
 addEventListener('resize', resize); resize();
 
 const camDir = new THREE.Vector3();
+let drawnSent = false;
 let frames = 0, fpsSince = performance.now();
 function adaptQuality() {
   frames++;
@@ -694,6 +699,10 @@ renderer.setAnimationLoop(() => {
   controls.update();
   renderer.render(scene, camera);
   if (view === 'arm') drawGizmo();
+  if (robot && !drawnSent) {                       // the first frame with Lumi in it: the app fades the view in
+    drawnSent = true;
+    window.ReactNativeWebView?.postMessage(JSON.stringify({ type: 'drawn' }));
+  }
 });
 </script>
 </body>

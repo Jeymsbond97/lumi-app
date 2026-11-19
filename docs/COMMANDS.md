@@ -83,7 +83,9 @@ own teach pendant), in the app's dark panels; the shapes are in `lib/armPad.ts` 
   joints from `GET /arm/joints` 5 times a second while the arm has power (`useLiveJoints`), gliding between readings.
   The model has no gripper fingers, so the gripper is not drawn. The WebView is mounted only while ARM SETUP shows on
   a focused screen, and its page starts in the arm view (`LumiScene initial`, written into the page as
-  `window.LUMI_STATE` before it runs), so Lumi's whole body never flashes first. Home's view is unchanged.
+  `window.LUMI_STATE` before it runs), so Lumi's whole body never flashes first. The card and the page are the simulation's grey from the first paint
+  (`LumiScene background`), and the scene fades in over 200 ms once the page has drawn its first frame with the arm
+  (its `drawn` message): no black flash. Home's view is unchanged.
 - **Joint angles and frame**: the joints go to the model exactly as on Home (the model's angles are the
   controller's), and the arm view draws the arm alone in the controller's own frame, z up, as it is mounted on Lumi:
   on its side, J1 level along x, its base on a plain grey plate and post where the torso holds it, the floor grid
@@ -92,7 +94,8 @@ own teach pendant), in the app's dark panels; the shapes are in `lib/armPad.ts` 
   up, as the gizmo). The frame is fitted to 13 of the controller's own forward kinematics readings (`kine_forward`,
   2026-11-19): the model's arm frame turned a quarter turn about z and 30.4 mm along x puts the flange within 1.1 mm
   of every reading (`flangeMm` in `lib/armFrame.ts`, all 13 in `lib/__tests__/armFrame.test.ts`). The view starts as
-  Cobo π's: a little from above and the front, looking slightly down, the arm's usual poses filling about two thirds
+  Cobo π's, from the same side as Home's camera (Lumi's front: the arm on the mount's left): a little from above,
+  looking slightly down, the arm's usual poses filling about two thirds
   of the height and the grid the lower half. Then it is the person's: orbit, zoom and pan stay exactly where they are
   left (no gliding back, no new framing on new joints or a resize); a double tap frames it again. Home keeps its own
   behaviour (it glides back to the whole robot).
