@@ -1,7 +1,9 @@
 // Hold-to-move for the body and the arm on Drive (lumi-wave api/control.py, POST /jog):
-// - axes: lift, waist, head_yaw, head_pitch (the body) and j1 to j6 (the arm joints); base_drive and base_turn are the
-//   joystick's (lib/drive). Only one body or arm axis moves at a time on the robot: a new one replaces the last.
-// - direction +1 or -1, speed 0.05 to 1 of the axis' top speed.
+// - axes: lift, waist, head_yaw, head_pitch (the body), j1 to j6 (the arm joints) and tcp_x, tcp_y, tcp_z (the hand in
+//   a straight line, arm base frame: x forward, y left, z up); base_drive and base_turn are the joystick's (lib/drive).
+//   Only one body or arm axis moves at a time on the robot: a new one replaces the last.
+// - direction +1 or -1, speed 0.05 to 1 of the axis' top speed. The robot scales j1 to j6 and tcp_* by its global arm
+//   speed (/arm/speed, lib/speed), so the app sends them with speed 1 when the robot has that speed.
 // - each call keeps the axis going for 0.35 s more (HOLD_S), so the app calls about every 150 ms while a finger holds
 //   the button, and /jog/stop on release (it stops every axis, the base too).
 // - the robot moves the body in small steps (lift 10 mm, waist and head yaw 3 deg, pitch 2 deg) and the arm 2 deg per
@@ -13,9 +15,13 @@ import type { AxisCommand } from './drive';
 export type BodyAxis = 'lift' | 'waist' | 'head_yaw' | 'head_pitch';
 export type ArmAxis = 'j1' | 'j2' | 'j3' | 'j4' | 'j5' | 'j6';
 export const ARM_AXES: ArmAxis[] = ['j1', 'j2', 'j3', 'j4', 'j5', 'j6'];
+export type TcpAxis = 'tcp_x' | 'tcp_y' | 'tcp_z';
+export const TCP_AXES: TcpAxis[] = ['tcp_x', 'tcp_y', 'tcp_z'];
+/** Arm jog speed when the robot has a global arm speed: it scales the jog itself. */
+export const ARM_JOG_SPEED = 1;
 
 export interface JogCommand {
-  axis: AxisCommand['axis'] | BodyAxis | ArmAxis;
+  axis: AxisCommand['axis'] | BodyAxis | ArmAxis | TcpAxis;
   direction: 1 | -1;
   /** 0.05 to 1 of the axis' top speed */
   speed: number;
@@ -134,6 +140,6 @@ export function createJogHold(deps: JogDeps): JogHold {
 export const holdAllowed = (s: { focused: boolean; foreground: boolean; touches: number }): boolean =>
   s.focused && s.foreground && s.touches <= 1;
 
-/** The three speeds of the Drive screen's buttons, as a share of the axis' top speed. */
+/** The three arm speeds of a robot without /arm/speed, as a share of the axis' top speed. */
 export const SPEEDS = { slow: 0.2, normal: 0.5, fast: 1 } as const;
 export type SpeedName = keyof typeof SPEEDS;
