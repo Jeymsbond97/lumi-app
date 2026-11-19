@@ -1,4 +1,4 @@
-import { CAMERA_ASPECT, cameraLayout, cameraLive, latestUrl } from '../camera';
+import { CAMERA_ASPECT, cameraLayout, cameraLive, latestUrl, wantsHd } from '../camera';
 
 const tablet = { width: 1280, height: 800, insetTop: 0, insetRight: 0, insetBottom: 0 };
 const phone = { width: 844, height: 390, insetTop: 0, insetRight: 47, insetBottom: 21 };
@@ -60,5 +60,14 @@ describe('cameraLive', () => {
 describe('latestUrl', () => {
   it('makes every address new', () => {
     expect(latestUrl('http://x:8100', 'head', 3)).toBe('http://x:8100/camera/head/latest.jpg?n=3');
+  });
+});
+
+describe('wantsHd', () => {
+  it('takes the 1280 px picture when the panel has more real pixels than 640', () => {
+    expect(wantsHd(400, 2)).toBe(true); // a phone panel: 800 px
+    expect(wantsHd(300, 3)).toBe(true);
+    expect(wantsHd(300, 2)).toBe(false); // 600 px: the small one is sharp enough
+    expect(wantsHd(640, 1)).toBe(false);
   });
 });

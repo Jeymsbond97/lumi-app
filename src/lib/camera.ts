@@ -8,6 +8,13 @@ export const CAMERAS = ['head', 'torso'] as const;
 export type CameraName = (typeof CAMERAS)[number];
 
 /** Both cameras send 640 x 360. */
+export const SMALL_PX = 640;
+
+/**
+ * The camera's own 1280 x 720 picture when the place it is shown in has more real pixels across than the 640 px
+ * one (a phone or tablet screen has 2 to 3 pixels per point): scaled up, the small one looks smeared.
+ */
+export const wantsHd = (widthPt: number, pixelRatio: number) => widthPt * pixelRatio > SMALL_PX * 1.1;
 export const CAMERA_ASPECT = 16 / 9;
 /** At most one new picture per camera this often (5 a second). */
 export const FRAME_MS = 200;

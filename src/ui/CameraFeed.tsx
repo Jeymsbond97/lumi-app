@@ -3,12 +3,13 @@
 // Paused (another screen, the app in the background), the last picture is dropped: coming back shows WAITING until a
 // new one has come, never minutes-old pictures (owner, 2026-11-18).
 import { useEffect, useRef, useState } from 'react';
-import { Image, StyleSheet, Text, View } from 'react-native';
+import { Image, PixelRatio, StyleSheet, Text, View } from 'react-native';
 import {
   cameraLive,
   FRAME_MS,
   FRAME_TIMEOUT_MS,
   hdUrl,
+  wantsHd,
   INFO_MS,
   infoUrl,
   latestUrl,
@@ -50,10 +51,11 @@ export function CameraFeed({
   bare?: boolean;
   /** At most one new picture this often. */
   frameMs?: number;
-  /** The camera's own size (1280 x 720) instead of 640 px: for a picture that fills the screen. */
+  /** Always the camera's own size (1280 x 720); otherwise it is used whenever the picture is shown bigger than 640 px. */
   hd?: boolean;
 }) {
   const { t } = useI18n();
+  const sharp = hd || wantsHd(width, PixelRatio.get());
   const [uris, setUris] = useState<[string | null, string | null]>([null, null]);
   const [front, setFront] = useState<Slot | null>(null);
   const [failed, setFailed] = useState(false);
@@ -69,7 +71,7 @@ export function CameraFeed({
     let pending: string | null = null;
     let askedAt = 0;
     let fails = 0;
-    let big = hd; // falls back to the 640 px picture when the robot has no hd.jpg yet
+    let big = sharp; // falls back to the 640 px picture when the robot has no hd.jpg yet
     let bigSeen = false;
     let next: ReturnType<typeof setTimeout> | undefined;
     let watchdog: ReturnType<typeof setTimeout> | undefined;
@@ -143,7 +145,7 @@ export function CameraFeed({
       setFront(null);
       setUris([null, null]);
     };
-  }, [active, baseUrl, name, frameMs, hd]);
+  }, [active, baseUrl, name, frameMs, sharp]);
 
   const showing = front !== null && !failed && live;
   const quiet = failed || !live ? t('cameraNoPicture') : front === null ? t('cameraWaiting') : null;
