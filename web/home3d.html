@@ -611,7 +611,6 @@ function applyHud() {
 // the arm alone: its base joint moves from Lumi's torso onto the grid, upright (J1 turns about the world's up), and
 // back again for Home; the rest of Lumi and Home's scenery are hidden meanwhile
 let armHome = null;                               // where the arm sits on Lumi: {parent, position, quaternion}
-const ARM_LOGOS = ['logo_link_a1', 'logo_link_a2', 'logo_link_a4'];
 function measureArm() {
   const base = J.l_a1 && J.l_a1.parent;
   if (!base) return;
@@ -630,7 +629,7 @@ function placeArm() {
   }
   robot.visible = !alone;
   flangeAxes.visible = alone;
-  for (const n of ARM_LOGOS) { const o = scene.getObjectByName(n); if (o) o.visible = !alone; }
+  // the JAKA logos on the arm (logo_link_a1 / a2 / a4) belong to their links: they come along, where they are on Lumi
   base.updateMatrixWorld(true);
 }
 function applyView() {
