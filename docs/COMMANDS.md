@@ -40,10 +40,10 @@ are plain functions in `src/lib/commands.ts`, tested in `src/lib/__tests__/comma
 |---|---|---|---|---|
 | Arm & objects | Pick up | object | `POST /tasks/steps` `[{do: pick, object, colour}]` (as voice reads "pick up the cup") | Greeter or Patrol, arm, empty hand |
 | | Put it down | | `POST /tasks/place` `{on: null}` | Greeter or Patrol, arm, holding |
-| | Hand it over | | `POST /tasks/give` | Greeter or Patrol, arm, holding |
-| | Take from me | object | `POST /tasks/steps` `[{do: receive, object, from_hand: true}]`; Release (task card or Missions) or "okay" closes the hand | Greeter or Patrol, arm, empty hand |
+| | Give | | `POST /tasks/give` (arm to the `give` pose) | Greeter or Patrol, arm, holding |
+| | Take | object | `POST /tasks/steps` `[{do: receive, object, from_hand: true}]` (open hand held out in the `give` pose); Release (task card or Missions) or "okay" closes the hand | Greeter or Patrol, arm, empty hand |
 | | Move it aside | object | `POST /skills/move` `{object, colour}`, watched on `GET /skills/state` | arm, empty hand |
-| | Wave | | `POST /arm/wave` (answers when done; follows the global arm speed) | arm |
+| | Wave | | `POST /arm/wave` (answers when done; follows the global arm speed). With Greeter or Patrol on Lumi says a hello as the hand comes up (Thor `tasks/wave_lines.py` ASKED, English or Korean at random); both off: a silent wave | arm |
 | Moving | Come here | | `POST /tasks/command` `{text: "come here"}` | Patrol |
 | | Follow me | | `POST /tasks/command` `{text: "follow me"}` | Patrol |
 | | Go to | marker | `POST /agv/go` `{marker}` | |
