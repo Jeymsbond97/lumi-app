@@ -8,6 +8,7 @@ import { LumiScene } from '../../ui/LumiScene';
 import { useRobot } from '../../lib/robot';
 import { useLiveJoints } from '../../lib/useLiveJoints';
 import { ConnectingView } from '../../ui/ConnectingView';
+import { WaveButton } from '../../ui/WaveButton';
 import { useLanding } from '../../lib/landing';
 
 export default function Home() {
@@ -33,6 +34,8 @@ export default function Home() {
         <LumiScene state={scene} onReady={() => setSceneReady(true)} />
       </View>
       <Joystick />
+      {/* left, above the modes (owner, 2026-11-20); like every control it waits for the 3D robot */}
+      {sceneReady && <WaveButton />}
       {/* Lumi keeps looking at you until the 3D robot is drawn, then the scene shows through */}
       {!sceneReady && (
         <Animated.View style={StyleSheet.absoluteFill} exiting={FadeOut.duration(450)} pointerEvents="none">

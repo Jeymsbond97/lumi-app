@@ -18,6 +18,18 @@ const SLIDE_PX = 12;
 /** Room between the panel and STOP: STOP's wave grows to 1.45 times its size, and the "Stopped" note sits there. */
 const ABOVE_STOP = 100;
 
+/** The panel's sizes on a screen this high: words, switch width, one row. */
+const modeSizes = (h: number) => {
+  const text = clamp(13, 0.024 * h, 18);
+  const sw = clamp(36, 0.06 * h, 46);
+  return { text, sw, rowH: sw * 0.55 + text * 0.9 };
+};
+
+/** Where the panel is: its bottom above the screen's bottom edge and its height (Home's WAVE sits above it). */
+export function modesBox(h: number, insetBottom: number) {
+  return { bottom: 18 + insetBottom + stopSize(h) + ABOVE_STOP, height: modeSizes(h).rowH * MODES.length };
+}
+
 function Toggle({ on, w }: { on: boolean; w: number }) {
   const h = w * 0.55;
   const k = h - 6;
@@ -42,9 +54,7 @@ export function ModesPanel() {
   const [busy, setBusy] = useState<Mode | null>(null);
   const [failed, setFailed] = useState(false);
   const startX = useRef(0);
-  const text = clamp(13, 0.024 * h, 18);
-  const sw = clamp(36, 0.06 * h, 46);
-  const rowH = sw * 0.55 + text * 0.9;
+  const { text, sw, rowH } = modeSizes(h);
 
   if (!modes) return null;
 
@@ -68,7 +78,7 @@ export function ModesPanel() {
 
   const railH = rowH * MODES.length;
   return (
-    <View style={[styles.panel, { left: 26 + inset.left, bottom: 18 + inset.bottom + stopSize(h) + ABOVE_STOP }]}>
+    <View style={[styles.panel, { left: 26 + inset.left, bottom: modesBox(h, inset.bottom).bottom }]}>
       <Svg width={2} height={railH} style={styles.rail} pointerEvents="none">
         <Line x1={1} y1={0} x2={1} y2={railH} stroke={mono.dim} strokeWidth={1} strokeDasharray="3 4" />
       </Svg>

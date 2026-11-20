@@ -33,6 +33,12 @@ const STATE_DOT: Partial<Record<TextKey, string>> = {
 
 const nameSizes = (h: number) => ({ nameSize: clamp(26, 0.07 * h, 56), small: clamp(11, 0.019 * h, 15) });
 
+/** The lowest the name block reaches (its state line included) from the screen's top edge. */
+export function nameBlockBottom(h: number, insetTop: number) {
+  const { nameSize, small } = nameSizes(h);
+  return 14 + insetTop + nameSize * 1.1 + 4 + small * 1.4;
+}
+
 export function StatusHud() {
   const { t } = useI18n();
   const { status } = useRobot();
