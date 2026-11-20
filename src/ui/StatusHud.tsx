@@ -1,9 +1,12 @@
-// On every screen after the loading screen (style D): the name in dot matrix top left (moving or base offline under it),
+// On every screen after the loading screen (style D): the name in dot matrix top left (moving or base offline under it;
+// tapping the name opens Home),
 // top centre the body and arm power (tapping the body enables or disables it; tapping the arm powers it on, enables,
 // disables or powers it off; each asks first in ConfirmDialog). Head, waist and lift are not shown here (owner,
 // 2026-11-18): Drive's BODY page shows them.
 // Battery: BatteryBadge, top right.
 import { ActivityIndicator, Pressable, StyleSheet, Text, useWindowDimensions, View } from 'react-native';
+import { router, usePathname } from 'expo-router';
+import * as Haptics from 'expo-haptics';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { ARM_TEXT, type ArmState } from '../lib/api';
 import type { TextKey } from '../lib/i18n';
@@ -28,22 +31,38 @@ const STATE_DOT: Partial<Record<TextKey, string>> = {
 };
 
 
+const nameSizes = (h: number) => ({ nameSize: clamp(26, 0.07 * h, 56), small: clamp(11, 0.019 * h, 15) });
+
 export function StatusHud() {
   const { t } = useI18n();
   const { status } = useRobot();
+  const path = usePathname();
   const { height: h } = useWindowDimensions();
   const inset = useSafeAreaInsets();
   const { arm, body: bodyNow, busyArm, busyBody, switchArm, switchBody, note, ask, closeAsk } = usePowerSwitch();
-  const nameSize = clamp(26, 0.07 * h, 56);
-  const small = clamp(11, 0.019 * h, 15);
+  const { nameSize, small } = nameSizes(h);
+
+  const goHome = () => {
+    if (path === '/home') return;
+    Haptics.selectionAsync().catch(() => {});
+    router.navigate('/home');
+  };
 
   return (
     <>
-      <View style={[styles.nameBlock, { left: 24 + inset.left, top: 14 + inset.top }]} pointerEvents="none">
-        <Text style={[styles.name, { fontSize: nameSize, lineHeight: nameSize * 1.1 }]}>LUMI</Text>
+      <View style={[styles.nameBlock, { left: 24 + inset.left, top: 14 + inset.top }]} pointerEvents="box-none">
+        <Pressable
+          onPress={goHome}
+          hitSlop={8}
+          accessibilityRole="link"
+          accessibilityLabel={t('tabHome')}
+          style={({ pressed }) => pressed && styles.pressed}
+        >
+          <Text style={[styles.name, { fontSize: nameSize, lineHeight: nameSize * 1.1 }]}>LUMI</Text>
+        </Pressable>
         {/* only a state worth a look: moving or the base offline; plain "ready" is not shown (owner, 2026-11-16) */}
         {status && status.status !== 'statusReady' && (
-          <View style={[styles.row, { gap: small * 0.6 }]}>
+          <View style={[styles.row, { gap: small * 0.6 }]} pointerEvents="none">
             <View style={[styles.dot, { width: small * 0.6, height: small * 0.6, backgroundColor: STATE_DOT[status.status] }]} />
             <Text style={[styles.label, { fontSize: small }]}>{t(status.status)}</Text>
           </View>
