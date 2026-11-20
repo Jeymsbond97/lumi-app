@@ -61,6 +61,7 @@ type Tab = 'joints' | 'poses' | 'move';
 const ARM_VIEW: SceneState = { view: 'arm', armState: 'off', charging: false };
 /** The simulation's grey (web/home3d.html SIM_BG): the 3D card's colour from the first frame, the scene fades in over it. */
 const SIM_GREY = '#767b82';
+const CARD_RADIUS = 16;
 
 /** How a tap went, for the Commands status line: a text of the app (key) or the robot's own reason. */
 export interface ArmReport {
@@ -382,7 +383,7 @@ export function ArmSetupPanel({
         </Pressable>
       )}
       {parts && (
-        <View style={[styles.tcp, { paddingHorizontal: size * 0.6, paddingVertical: size * 0.35 }]}>
+        <View style={[styles.tcp, { paddingHorizontal: Math.max(CARD_RADIUS, size * 0.9), paddingVertical: size * 0.5 }]}>
           {parts.map((p) => (
             <Text key={p.key} style={[styles.tcpPart, { fontSize: size * (wide ? 0.72 : 0.6) }, !wide && styles.tcpThird]} numberOfLines={1}>
               <Text style={styles.tcpName}>{`${t(p.key)} `}</Text>
@@ -741,7 +742,16 @@ const styles = StyleSheet.create({
   simWide: { flex: 1.9 },
   jointsWide: { flex: 1 },
   stopCorner: { position: 'absolute', top: 6, right: 6, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 0 },
-  tcp: { flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'space-between', rowGap: 2, backgroundColor: 'rgba(10,11,13,0.92)' },
+  // at least the card's two corners high and in from them: a thinner strip looked like an ellipse (owner, 2026-11-20)
+  tcp: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    justifyContent: 'space-between',
+    alignContent: 'center',
+    rowGap: 2,
+    minHeight: 2 * CARD_RADIUS,
+    backgroundColor: 'rgba(10,11,13,0.92)',
+  },
   tcpPart: { fontFamily: fonts.monoBold, color: mono.text },
   tcpThird: { width: '33%' },
   tcpName: { fontFamily: fonts.mono, color: mono.soft },
@@ -749,7 +759,7 @@ const styles = StyleSheet.create({
   pressed: { opacity: 0.6 },
   dim: { opacity: 0.38 },
   card: {
-    borderRadius: 16,
+    borderRadius: CARD_RADIUS,
     borderWidth: 1,
     borderColor: '#2e2e2e',
     backgroundColor: '#0e0f11',
