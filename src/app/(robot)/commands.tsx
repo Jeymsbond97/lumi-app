@@ -1,7 +1,7 @@
 // The Commands screen (docs/COMMANDS.md): everything Lumi can do, each a tap or a tap and a small choice, grouped as
 // Arm & objects, Moving, Talking and Missions; Arm setup has the arm by hand instead (ui/ArmSetupPanel). Anything
-// that moves the arm or the base asks first. The line under the groups says how the last tap went (sent, refused and
-// why), and what Lumi is doing; the task card on the right has Pause, Release and Stop as on every screen. Missions
+// that moves the arm or the base asks first. The line under the groups says how the last tap in that group went
+// (sent, refused and why; "Done" for DONE_SHOWN_MS, then it goes), and what Lumi is doing; the task card on the right has Pause, Release and Stop as on every screen. Missions
 // has the typed command box: read as voice reads it first.
 // The content sits between the modes on the left, the task card on the right, the power chips on top and the Dock.
 import { useCallback, useEffect, useState } from 'react';
@@ -82,6 +82,7 @@ const POLL_MS = 1500; // the hand and the last skill, while this screen is open
 const DOCK_SPACE = 64; // room the sections dock takes at the bottom, above the safe area
 const SEEN_WAIT_MS = 3000; // the torso camera's objects when a choice of objects opens
 const SEEN_POLL_MS = 1000; // Pick up and Move aside: the things seen, read again this often while the list is open
+const DONE_SHOWN_MS = 4000; // a finished tap's "Done" stays this long, then the line shows the task again
 
 type Group = 'arm' | 'move' | 'talk' | 'mission' | 'armSetup';
 const GROUPS: { key: Group; label: TextKey }[] = [
@@ -110,6 +111,12 @@ interface Last extends Outcome {
   skill: boolean;
   /** A reason the app knew before sending (blocked). */
   key: TextKey | null;
+  /** When it was first seen finished; `faded` once DONE_SHOWN_MS later (the line then shows the task, an answer stays). */
+  doneAt?: number;
+  faded?: boolean;
+  /** When the robot answered the tap: a skill's /skills/state read after this is about this skill (it is `running`
+   *  before the robot answers). */
+  answeredAt?: number;
 }
 
 interface Tile {
@@ -189,7 +196,12 @@ export default function CommandsScreen() {
   const [things, setThings] = useState<Thing[]>(() => thingChoices(null));
   /** Pick up and Move aside: the things the torso camera sees near now; null until the first reading. */
   const [seen, setSeen] = useState<Thing[] | null>(null);
-  const [last, setLast] = useState<Last | null>(null);
+  /** Each group's own last tap: a group never shows another group's result. */
+  const [lasts, setLasts] = useState<Partial<Record<Group, Last>>>({});
+  const last = lasts[group] ?? null;
+  const put = useCallback((g: Group, next: Last | ((prev: Last | undefined) => Last | undefined)) => {
+    setLasts((prev) => ({ ...prev, [g]: typeof next === 'function' ? next(prev[g]) : next }));
+  }, []);
   const [choice, setChoice] = useState<ChoiceKind | null>(null);
   const [values, setValues] = useState<Record<string, string>>({});
   const [confirm, setConfirm] = useState<ConfirmRequest | null>(null);
@@ -210,7 +222,22 @@ export default function CommandsScreen() {
       read(url, '/tasks/state', 3000).then((r) => on && r !== null && setHolding(toHolding(r)));
       read(url, '/skills/state', 3000).then((r) => {
         const s = toSkillState(r);
-        if (on && s) setSkill({ ...s, readAt });
+        if (!on || !s) return;
+        setSkill({ ...s, readAt });
+        if (s.status !== 'done') return;
+        // a skill sent before this reading has finished: its line fades from now on
+        setLasts((prev) => {
+          let changed = false;
+          const next = { ...prev };
+          for (const g of Object.keys(prev) as Group[]) {
+            const l = prev[g];
+            if (l && l.skill && l.phase === 'sent' && l.answeredAt !== undefined && l.answeredAt < readAt && l.doneAt === undefined) {
+              next[g] = { ...l, doneAt: Date.now() };
+              changed = true;
+            }
+          }
+          return changed ? next : prev;
+        });
       });
     };
     tick();
@@ -245,13 +272,17 @@ export default function CommandsScreen() {
     (r: Run) => {
       Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => {});
       const at = Date.now();
-      setLast({ label: r.label, at, skill: !!r.skill, key: null, phase: 'sending', reason: null, answer: null });
+      const g = group; // the answer goes to the group it was sent from, even if another one is open by then
+      put(g, { label: r.label, at, skill: !!r.skill, key: null, phase: 'sending', reason: null, answer: null });
       send(url, r.req).then((reply) => {
+        const out = toOutcome(reply, !!r.waits);
+        const answeredAt = Date.now();
+        const doneAt = out.phase === 'done' ? answeredAt : undefined;
         // a newer tap's line stays
-        setLast((prev) => (prev && prev.at !== at ? prev : { label: r.label, at, skill: !!r.skill, key: null, ...toOutcome(reply, !!r.waits) }));
+        put(g, (prev) => (prev && prev.at !== at ? prev : { label: r.label, at, skill: !!r.skill, key: null, ...out, doneAt, answeredAt }));
       });
     },
-    [url],
+    [url, put, group],
   );
 
   const go = (r: Run) => {
@@ -262,12 +293,25 @@ export default function CommandsScreen() {
   /** A tile's tap: what it needs first, else its run. */
   const refuse = useCallback((label: TextKey, why: TextKey) => {
     Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning).catch(() => {});
-    setLast({ label, at: Date.now(), skill: false, key: why, phase: 'refused', reason: null, answer: null });
-  }, []);
+    put(group, { label, at: Date.now(), skill: false, key: why, phase: 'refused', reason: null, answer: null });
+  }, [put, group]);
   /** ARM SETUP's taps, on the same status line. */
   const report = useCallback((r: ArmReport) => {
-    setLast({ label: r.label, at: Date.now(), skill: false, key: r.key ?? null, phase: r.phase, reason: r.reason ?? null, answer: null });
-  }, []);
+    const at = Date.now();
+    put('armSetup', { label: r.label, at, skill: false, key: r.key ?? null, phase: r.phase, reason: r.reason ?? null, answer: null, doneAt: r.phase === 'done' ? at : undefined });
+  }, [put]);
+
+  // a finished tap's line fades DONE_SHOWN_MS after it finished
+  useEffect(() => {
+    const timers = (Object.keys(lasts) as Group[]).flatMap((g) => {
+      const l = lasts[g];
+      if (!l || l.doneAt === undefined || l.faded) return [];
+      const at = l.at;
+      const fade = () => put(g, (prev) => (prev && prev.at === at ? { ...prev, faded: true } : prev));
+      return [setTimeout(fade, Math.max(0, l.doneAt + DONE_SHOWN_MS - Date.now()))];
+    });
+    return () => timers.forEach(clearTimeout);
+  }, [lasts, put]);
   const tap = (tile: Tile) => {
     const why = tile.off ?? blocked(tile.needs ?? [], ready);
     if (why) refuse(tile.label, why);
@@ -577,7 +621,7 @@ export default function CommandsScreen() {
 
   const statusLine = (): { dot: string; head: string; words: string } => {
     if (group === 'armSetup' && power.note) return { dot: mono.yellow, head: t('cmdGroupArmSetup'), words: t(power.note) };
-    if (!last) {
+    if (!last || last.faded) {
       if (!task) return { dot: mono.dim, head: t('cmdTask'), words: t('cmdNoTask') };
       const k = taskStepText(task.step);
       return { dot: mono.green, head: t('cmdTask'), words: k ? t(k) : task.step };
@@ -588,7 +632,7 @@ export default function CommandsScreen() {
       const k = reasonKey(r);
       return k ? t(k) : r ?? t('cmdRefused');
     };
-    if (last.skill && last.phase === 'sent' && skill && skill.readAt > last.at && skill.status !== 'idle') {
+    if (last.skill && last.phase === 'sent' && skill && skill.readAt > (last.answeredAt ?? last.at) && skill.status !== 'idle') {
       const bad = skill.status === 'refused' || skill.status === 'stopped' || skill.status === 'failed';
       return {
         dot: skill.status === 'running' ? mono.blue : bad ? mono.yellow : mono.green,

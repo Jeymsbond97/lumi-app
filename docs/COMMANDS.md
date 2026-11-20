@@ -13,9 +13,11 @@ are plain functions in `src/lib/commands.ts`, tested in `src/lib/__tests__/comma
 - **Groups** on top: ARM & OBJECTS, MOVING, TALKING, MISSIONS, ARM SETUP. One group's tiles show at a time, so a
   phone (landscape, about 844 × 390) fits them; the tile grid scrolls. ARM SETUP shows the arm settings panel instead
   of tiles (below).
-- **The status line** under the groups: how the last tap went (sending, Lumi is on it, the assistant does it, done,
-  refused and the robot's reason, Lumi did not answer). For "Move it aside" it follows `/skills/state` (working, done,
-  refused with its reason). With no tap yet it shows the running task's step. An `/ask` answer is shown under it.
+- **The status line** under the groups: how the last tap in that group went (sending, Lumi is on it, the assistant
+  does it, done, refused and the robot's reason, Lumi did not answer); each group keeps its own, so Volume in Talking
+  never shows on Arm & objects. For "Move object" it follows `/skills/state` (working, done, refused with its reason).
+  "Done" stays 4 s (`DONE_SHOWN_MS`), then the line goes back to the running task's step, as with no tap yet. An `/ask`
+  answer is shown under it and stays.
 - **A tile that can't run now** is dimmed; tapping it says why instead of sending (switch on Greeter or Patrol,
   switch on Patrol, enable the arm, Lumi holds something, Lumi is not holding anything). The robot checks again
   anyway and its refusal is shown the same way.
@@ -26,7 +28,7 @@ are plain functions in `src/lib/commands.ts`, tested in `src/lib/__tests__/comma
 - **Pick up is typed**: a field takes what to take ("blue cup", "파란 컵"), read in English and Korean by
   `parseThing` (an object Lumi can take, a colour if one is named); SEND starts it at once. Under the field the
   things seen near now (below) are offered as one tap words.
-- **Move aside** lists only what the torso camera sees now within reach (`seenThings`: 850 mm from the
+- **Move object** lists only what the torso camera sees now within reach (`seenThings`: 850 mm from the
   arm's base, 1500 mm with Patrol on, when the base may drive closer), read again every second while the list is open.
   A tap on a name starts it at once: no GO and no second question (the owner, 2026-11-19). Further "objects" were
   mostly something else (a blue chair 2.4 m away read as a blue cup, and the pick was refused out of reach).
@@ -42,7 +44,7 @@ are plain functions in `src/lib/commands.ts`, tested in `src/lib/__tests__/comma
 | | Put it down | | `POST /tasks/place` `{on: null}` | Greeter or Patrol, arm, holding |
 | | Give | | `POST /tasks/give` (arm to the `give` pose) | Greeter or Patrol, arm, holding |
 | | Take | object | `POST /tasks/steps` `[{do: receive, object, from_hand: true}]` (open hand held out in the `give` pose); Release (task card or Missions) or "okay" closes the hand | Greeter or Patrol, arm, empty hand |
-| | Move it aside | object | `POST /skills/move` `{object, colour}`, watched on `GET /skills/state` | arm, empty hand |
+| | Move object (pick it up, put it down at a free spot nearby) | object | `POST /skills/move` `{object, colour}`, watched on `GET /skills/state` | arm, empty hand |
 | | Wave | | `POST /arm/wave` (answers when done; follows the global arm speed). With Greeter or Patrol on Lumi says a hello as the hand comes up (Thor `tasks/wave_lines.py` ASKED, English or Korean at random); both off: a silent wave | arm |
 | Moving | Come here | | `POST /tasks/command` `{text: "come here"}` | Patrol |
 | | Follow me | | `POST /tasks/command` `{text: "follow me"}` | Patrol |
