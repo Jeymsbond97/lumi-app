@@ -1,7 +1,7 @@
 // Home's WAVE (owner, 2026-11-20): Lumi waves its hand, the same as COMMANDS > WAVE (POST /arm/wave); with Greeter
-// or Patrol on the robot also says a hello. Only the hand icon, on the left edge a little above the modes: the camera
-// tab on the right edge, mirrored (same size and glass). Where a short screen (a phone on its side) has no room there,
-// it is a rounded square right of STOP instead.
+// or Patrol on the robot also says a hello. Only the hand icon, on the left edge at the camera tab's height (the
+// screen's middle): the camera tab on the right edge, mirrored (same size, glass and height). Where that would come
+// too near the modes or the name (a phone on its side), it is a rounded square right of STOP instead.
 // A tap waves at once, without asking (owner, 2026-11-20; COMMANDS > WAVE still asks). It is dimmed while the arm is not enabled (a tap then says so), and shows a spinner
 // until the wave has ended; a refusal or no answer shows under it for a moment.
 import { useEffect, useState } from 'react';
@@ -15,15 +15,16 @@ import { CommandIcon } from './CommandIcon';
 import { modesBox } from './ModesPanel';
 import { nameBlockBottom } from './StatusHud';
 import { stopSize } from './StopButton';
+import { cameraLayout } from '../lib/camera';
 import { clamp, fonts, mono } from './theme';
 
 const NOTE_MS = 3500; // a refusal stays this long
-const GAP = 18; // between the button and the modes above which it sits, and the name block
+const GAP = 18; // at least this between the button and the modes below it, and the name above it
 
 export function WaveButton() {
   const { t } = useI18n();
   const { connection, status } = useRobot();
-  const { height: h } = useWindowDimensions();
+  const { width: w, height: h } = useWindowDimensions();
   const inset = useSafeAreaInsets();
   const [busy, setBusy] = useState(false);
   const [note, setNote] = useState<string | null>(null);
@@ -35,17 +36,19 @@ export function WaveButton() {
   }, [note]);
 
   const small = clamp(11, 0.019 * h, 15);
-  // the camera tab's size (lib/camera cameraLayout)
-  const tabH = clamp(44, 0.07 * h, 56);
-  const tabW = Math.round(tabH * 0.85);
+  // the camera tab's size and height
+  const cam = cameraLayout({ width: w, height: h, insetTop: inset.top, insetRight: inset.right, insetBottom: inset.bottom });
+  const tabH = cam.buttonHeight;
+  const tabW = cam.buttonWidth;
 
-  // on the left edge above the modes when the room between them and the name allows it, else right of STOP
+  // on the left edge level with the camera tab when it stays clear of the modes below and the name above,
+  // else right of STOP
   const modes = modesBox(h, inset.bottom);
-  const aboveModes = modes.bottom + modes.height + GAP;
-  const edge = h - aboveModes - tabH >= nameBlockBottom(h, inset.top) + GAP;
+  const modesTop = h - modes.bottom - modes.height;
+  const edge = cam.buttonTop + tabH + GAP <= modesTop && cam.buttonTop >= nameBlockBottom(h, inset.top) + GAP;
   const stop = stopSize(h);
   const place = edge
-    ? { left: 0, bottom: aboveModes }
+    ? { left: 0, top: cam.buttonTop }
     : { left: 24 + inset.left + stop * 1.3 + 12, bottom: 18 + inset.bottom + (stop - tabH) / 2 };
 
   const why = blocked(['arm'], { modes: null, armOn: status?.armState === 'enabled', holding: null });
