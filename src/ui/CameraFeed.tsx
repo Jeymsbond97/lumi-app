@@ -24,8 +24,11 @@ const NAME_TEXT: Record<CameraName, TextKey> = { head: 'cameraHead', torso: 'cam
 /** Two failed pictures in a row and the camera shows no picture until one comes again. */
 const FAILS_SHOWN = 2;
 
-/** Every picture address is new, also after the panel was closed and opened again. */
-let pictureNumber = 0;
+/** Every picture address is new, also after the panel was closed and opened again, and after the app restarts: it
+ *  counts on from the start time. Counting from 0 at each start gave addresses an earlier run had asked for, and
+ *  Android showed those pictures from its image cache, old ones from minutes before (owner, 2026-11-23: the CAMERA
+ *  page showed where the head had looked earlier, mixed with live pictures, before it settled). */
+let pictureNumber = Date.now();
 const nextNumber = () => ++pictureNumber;
 
 type Slot = 0 | 1;
