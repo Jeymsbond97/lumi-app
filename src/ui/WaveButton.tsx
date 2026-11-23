@@ -1,6 +1,6 @@
 // Home's WAVE (owner, 2026-11-20): Lumi waves its hand, the same as COMMANDS > WAVE (POST /arm/wave); with Greeter
-// or Patrol on the robot also says a hello. Only the hand icon, on the left edge at the camera tab's height (the
-// screen's middle): the camera tab on the right edge, mirrored (same size, glass and height). Where that would come
+// or Patrol on the robot also says a hello. Only the hand icon, on the left edge at the camera tab's height (above
+// the screen's middle): the camera tab on the right edge, mirrored (same size, glass and height). Where that would come
 // too near the modes or the name (a phone on its side), it is a rounded square right of STOP instead.
 // A tap waves at once, without asking (owner, 2026-11-20; COMMANDS > WAVE still asks). It is dimmed while the arm is not enabled (a tap then says so), and shows a spinner
 // until the wave has ended; a refusal or no answer shows under it for a moment.

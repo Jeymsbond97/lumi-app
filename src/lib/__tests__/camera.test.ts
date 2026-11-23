@@ -32,9 +32,9 @@ describe('cameraLayout', () => {
     expect(Math.abs(l.pictureWidth / l.pictureHeight - CAMERA_ASPECT)).toBeLessThan(0.02);
   });
 
-  it('centres the button on the right edge', () => {
+  it('puts the button on the right edge above the middle', () => {
     const l = cameraLayout(tablet);
-    expect(l.buttonTop + l.buttonHeight / 2).toBeCloseTo(400, 0);
+    expect(l.buttonTop + l.buttonHeight / 2).toBeCloseTo(320, 0);
   });
 
   it('gives no negative size on a tiny window', () => {

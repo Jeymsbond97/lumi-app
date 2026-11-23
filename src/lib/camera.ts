@@ -63,7 +63,8 @@ export interface CameraLayout {
   pictureHeight: number;
   /** Space around and between the pictures; the right side also gets the safe area. */
   pad: number;
-  /** The small camera button on the right edge, centred vertically. */
+  /** The small camera button on the right edge, its middle at BUTTON_MIDDLE of the screen height (Home's WAVE
+   *  sits level with it on the left edge). */
   buttonTop: number;
   buttonWidth: number;
   buttonHeight: number;
@@ -89,6 +90,8 @@ const PAD = 8;
 const MIN_EDGE_PICTURE = 80;
 const BESIDE_WIDTH_SHARE = 0.42;
 const GAP_SIDE = 12;
+/** The camera button's middle, as a share of the screen height: above the middle, clear of the modes (owner, 2026-11-23). */
+const BUTTON_MIDDLE = 0.4;
 
 /** The largest two pictures over each other that fit a band of this height and a panel of this width. */
 function pictures(band: number, panelWidth: number) {
@@ -130,7 +133,7 @@ export function cameraLayout(s: Screen): CameraLayout {
     pictureWidth,
     pictureHeight,
     pad: PAD,
-    buttonTop: Math.round(s.height / 2 - buttonHeight / 2),
+    buttonTop: Math.round(BUTTON_MIDDLE * s.height - buttonHeight / 2),
     buttonWidth,
     buttonHeight,
   };
