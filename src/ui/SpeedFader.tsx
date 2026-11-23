@@ -24,9 +24,14 @@ interface Props {
   onChange: (v: number) => void;
   onRelease: (v: number) => void;
   onStep: (v: number) => void;
+  /** The drawn circle of + and −; STEP_DOT when not given (a narrow fader passes a smaller one). */
+  dot?: number;
 }
 
-export function SpeedFader({ value, range, width, height, size, label, lessLabel, moreLabel, onChange, onRelease, onStep }: Props) {
+export function SpeedFader({ value, range, width, height, size, label, lessLabel, moreLabel, onChange, onRelease, onStep, dot = STEP_DOT }: Props) {
+  // a touch that began on + or − stays theirs: the fader does not take it over as a drag when the finger moves a
+  // little, so it does not light up as held (owner, 2026-11-23: each tap turned the whole frame white)
+  const onDot = useRef(false);
   const [dragging, setDragging] = useState(false);
   const start = useRef({ value, y: 0 });
   const last = useRef(value);
@@ -59,8 +64,8 @@ export function SpeedFader({ value, range, width, height, size, label, lessLabel
   const level = fractionOf(value, range);
   return (
     <View
-      onStartShouldSetResponder={() => true}
-      onMoveShouldSetResponder={() => true}
+      onStartShouldSetResponder={() => !onDot.current}
+      onMoveShouldSetResponder={() => !onDot.current}
       onResponderTerminationRequest={() => false}
       onResponderGrant={onGrant}
       onResponderMove={onMove}
@@ -77,7 +82,7 @@ export function SpeedFader({ value, range, width, height, size, label, lessLabel
       <View pointerEvents="none" style={[styles.level, { height: `${level * 100}%` }]}>
         <View style={styles.levelEdge} />
       </View>
-      <Dot glyph="M6 12 H18 M12 6 V18" label={moreLabel} onPress={() => step(SPEED_STEP)} />
+      <Dot glyph="M6 12 H18 M12 6 V18" label={moreLabel} size={dot} onHold={(on) => (onDot.current = on)} onPress={() => step(SPEED_STEP)} />
       <View pointerEvents="none" style={styles.readout}>
         <Text style={[styles.value, { fontSize: size * 1.45 }]}>
           {value}
@@ -87,21 +92,40 @@ export function SpeedFader({ value, range, width, height, size, label, lessLabel
           {label}
         </Text>
       </View>
-      <Dot glyph="M6 12 H18" label={lessLabel} onPress={() => step(-SPEED_STEP)} />
+      <Dot glyph="M6 12 H18" label={lessLabel} size={dot} onHold={(on) => (onDot.current = on)} onPress={() => step(-SPEED_STEP)} />
     </View>
   );
 }
 
-function Dot({ glyph, label, onPress }: { glyph: string; label: string; onPress: () => void }) {
+function Dot({
+  glyph,
+  label,
+  size,
+  onHold,
+  onPress,
+}: {
+  glyph: string;
+  label: string;
+  size: number;
+  /** true while a finger is on it. */
+  onHold: (on: boolean) => void;
+  onPress: () => void;
+}) {
   return (
     <Pressable
-      onPress={onPress}
-      hitSlop={(44 - STEP_DOT) / 2}
+      // at the touch, not its end: a tap on a tablet often moves a little, and onPress then never came
+      // (owner, 2026-11-23: + and − did nothing)
+      onPressIn={() => {
+        onHold(true);
+        onPress();
+      }}
+      onPressOut={() => onHold(false)}
+      hitSlop={Math.max(0, (44 - size) / 2)}
       accessibilityRole="button"
       accessibilityLabel={label}
-      style={({ pressed }) => [styles.dot, pressed && styles.dotPressed]}
+      style={({ pressed }) => [styles.dot, { width: size, height: size, borderRadius: size / 2 }, pressed && styles.dotPressed]}
     >
-      <Svg width={STEP_DOT * 0.5} height={STEP_DOT * 0.5} viewBox="0 0 24 24" pointerEvents="none">
+      <Svg width={size * 0.5} height={size * 0.5} viewBox="0 0 24 24" pointerEvents="none">
         <Path d={glyph} stroke={mono.text} strokeWidth={2} fill="none" strokeLinecap="round" />
       </Svg>
     </Pressable>
@@ -126,9 +150,6 @@ const styles = StyleSheet.create({
   unit: { fontFamily: fonts.mono, color: mono.soft },
   label: { fontFamily: fonts.mono, color: mono.soft, letterSpacing: 1.4, textTransform: 'uppercase', marginTop: 1 },
   dot: {
-    width: STEP_DOT,
-    height: STEP_DOT,
-    borderRadius: STEP_DOT / 2,
     alignItems: 'center',
     justifyContent: 'center',
     borderWidth: 1,

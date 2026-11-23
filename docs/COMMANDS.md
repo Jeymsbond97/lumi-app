@@ -16,6 +16,9 @@ are plain functions in `src/lib/commands.ts`, tested in `src/lib/__tests__/comma
   then the rest), with all of the old MOVING and TALKING groups (owner, 2026-11-23).
 - **The joystick** (`ui/Joystick.tsx`, as on Home) sits bottom right; the tiles keep its width free on the right
   (owner, 2026-11-23).
+- **Volume** is not a tile: a speaker button on the left edge where Home has WAVE (`ui/VolumeButton.tsx`). A tap
+  opens a small upright fader beside it, rising from the button so it stays clear of the modes: drag, or + / −;
+  `GET /volume` when it opens, `POST /volume {percent}` when the finger lifts.
 - **Choices** (Go to, Fetch, Carry, Turn, Look, Sing, ...) open as a card in the middle of the screen with the options
   as tiles; Cancel and Go are the same size. A choice of markers reads `GET /agv/markers` again every 3 s while it is
   open, so a marker just added, or the markers of a new map, show at once; the charger (`home`) comes first as
@@ -65,7 +68,6 @@ are plain functions in `src/lib/commands.ts`, tested in `src/lib/__tests__/comma
 | | Look | left, right, up, down, ahead | `POST /head/turn` `{yaw, pitch}` (+yaw = left 40°, up = pitch 20°, down and ahead = pitch −5°, the rest) | |
 | | Turn | left 90°, right 90°, around | `POST /tasks/steps` `[{do: turn, deg}]` (+ = left) | Patrol |
 | | Drive | forward / back / left / right, 0.5, 1 or 2 m | `POST /tasks/steps` `[{do: move, dir, m}]` | Patrol |
-| | Volume | − / + in steps of 10 % | `GET /volume`, `POST /volume` `{percent}` | |
 | Missions | Type a command | free text, or an example | `POST /tasks/parse` `{text, llm: false}` 0.6 s after typing stops, `llm: true` on Enter (nothing moves); START sends what it read: `steps` → `/tasks/steps`, `fetch` → `/tasks/fetch`, `carry` → `/tasks/carry`, `give` → `/tasks/give`, `place` → `/tasks/place`, `command` → `/tasks/command` (exactly as the dashboard's Command dialog) | what the robot says in `problems` |
 | | Pause / Resume / Release / Stop | | `POST /tasks/pause`, `/tasks/resume`, `/tasks/release`, `/tasks/stop` | a task that offers it (`taskButtons`) |
 

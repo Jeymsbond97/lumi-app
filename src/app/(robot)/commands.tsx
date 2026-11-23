@@ -9,7 +9,6 @@ import { Pressable, ScrollView, StyleSheet, Text, useWindowDimensions, View } fr
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useIsFocused } from 'expo-router';
 import * as Haptics from 'expo-haptics';
-import Svg, { Path } from 'react-native-svg';
 import { bodyPoseKnown, stepText as taskStepText, taskButtons, type TaskCommand } from '../../lib/api';
 import {
   askRequest,
@@ -36,7 +35,6 @@ import {
   sayRequest,
   send,
   singRequest,
-  stepVolume,
   thingChoices,
   seenThings,
   parseThing,
@@ -48,10 +46,7 @@ import {
   toOutcome,
   toSkillState,
   toSongs,
-  toVolume,
   turnRequest,
-  volumeRequest,
-  VOLUME_STEP,
   waveRequest,
   type CarryThen,
   type DriveDir,
@@ -73,6 +68,7 @@ import { useRobot } from '../../lib/robot';
 import { ArmSetupPanel, type ArmReport, type NameRequest } from '../../ui/ArmSetupPanel';
 import { CommandIcon, type CommandIconName } from '../../ui/CommandIcon';
 import { Joystick, joystickSize } from '../../ui/Joystick';
+import { VolumeButton } from '../../ui/VolumeButton';
 import { ChoiceDialog, CommandBox, TextDialog, type Box, type ChoiceField } from '../../ui/CommandDialogs';
 import { ConfirmDialog, type ConfirmRequest } from '../../ui/ConfirmDialog';
 import { NameDialog } from '../../ui/NameDialog';
@@ -129,8 +125,6 @@ interface Tile {
   onPress: () => void;
   wide?: boolean;
   red?: boolean;
-  /** The Volume tile: a stepper inside, no tap of its own. */
-  volume?: boolean;
 }
 
 const TASK_TILES: { cmd: TaskCommand; icon: CommandIconName; label: TextKey }[] = [
@@ -192,7 +186,6 @@ export default function CommandsScreen() {
   const [markers, setMarkers] = useState<string[]>([]);
   /** null: the robot has no GET /songs (yet); songs are then asked for by words. */
   const [songs, setSongs] = useState<Song[] | null>(null);
-  const [volume, setVolume] = useState<number | null>(null);
   const [holding, setHolding] = useState<boolean | null>(null);
   const [skill, setSkill] = useState<(SkillState & { readAt: number }) | null>(null);
   const [things, setThings] = useState<Thing[]>(() => thingChoices(null));
@@ -217,7 +210,6 @@ export default function CommandsScreen() {
     let on = true;
     read(url, '/agv/markers').then((r) => on && setMarkers(toMarkers(r)));
     read(url, '/songs').then((r) => on && setSongs(r === null ? null : toSongs(r)));
-    read(url, '/volume').then((r) => on && setVolume(toVolume(r)));
     const tick = () => {
       const readAt = Date.now();
       read(url, '/tasks/state', 3000).then((r) => on && r !== null && setHolding(toHolding(r)));
@@ -527,12 +519,6 @@ export default function CommandsScreen() {
     }
   };
 
-  const changeVolume = (by: number) => {
-    if (volume === null) return;
-    const next = stepVolume(volume, by);
-    setVolume(next);
-    fire({ label: 'cmdVolume', req: volumeRequest(next), waits: true });
-  };
 
   // ---------- the tiles ----------
   const firstMarker = markers.find((m) => m !== DOCK_MARKER) ?? markers[0] ?? '';
@@ -540,7 +526,7 @@ export default function CommandsScreen() {
 
   const TILES: Record<Exclude<Group, 'armSetup'>, Tile[]> = {
     // the main commands, most used first: Go charge, Wave, Sing, Follow me, Go to, then the rest (owner, 2026-11-23);
-    // with all of MOVING and TALKING (those groups are gone)
+    // with all of MOVING and TALKING (those groups are gone); Volume is the edge button (ui/VolumeButton)
     arm: [
       {
         icon: 'dock',
@@ -611,8 +597,6 @@ export default function CommandsScreen() {
       { icon: 'look', label: 'cmdLook', hint: 'cmdLookHint', onPress: () => open('look', { dir: 'centre' }) },
       { icon: 'turn', label: 'cmdTurn', hint: 'cmdTurnHint', needs: ['patrol'], onPress: () => open('turn', { way: 'left' }) },
       { icon: 'drive', label: 'cmdDrive', hint: 'cmdDriveHint', needs: ['patrol'], onPress: () => open('drive', { dir: 'forward', m: '0.5' }) },
-      // Volume: a − / + stepper in the tile, not a tap
-      { icon: 'volume', label: 'cmdVolume', volume: true, onPress: () => {} },
     ],
     mission: [
       ...TASK_TILES.map(
@@ -741,20 +725,6 @@ export default function CommandsScreen() {
               </View>
             )}
             {TILES[group].map((tile) => {
-              if (tile.volume)
-                return (
-                  <View key={tile.label} style={[styles.tile, { width: tileW, minHeight: size * 5.6, padding: size * 0.8, gap: size * 0.35 }]}>
-                    <CommandIcon name="volume" size={size * 1.7} color={mono.text} />
-                    <Text style={[styles.tileLabel, { fontSize: size * 0.92 }]}>{t('cmdVolume')}</Text>
-                    <View style={[styles.stepper, { gap: size * 0.4 }]}>
-                      <StepButton plus={false} size={size} onPress={() => changeVolume(-VOLUME_STEP)} disabled={volume === null} label={t('cmdVolumeDown')} />
-                      <Text style={[styles.volume, { fontSize: size * 0.9, minWidth: size * 3.2 }]}>
-                        {volume === null ? '' : fill(t('cmdPercent'), { p: volume })}
-                      </Text>
-                      <StepButton plus size={size} onPress={() => changeVolume(VOLUME_STEP)} disabled={volume === null} label={t('cmdVolumeUp')} />
-                    </View>
-                  </View>
-                );
               const why = tile.off ?? blocked(tile.needs ?? [], ready);
               // MISSIONS' task buttons: one row filling the width, icon beside the word
               const row = group === 'mission';
@@ -792,6 +762,7 @@ export default function CommandsScreen() {
       </View>
 
       <Joystick />
+      <VolumeButton active={focused} />
       {choice && (
         <ChoiceDialog
           size={size}
@@ -834,24 +805,6 @@ export default function CommandsScreen() {
   );
 }
 
-/** − or +, drawn (the mono font's minus sits off centre). */
-function StepButton({ plus, size, onPress, disabled, label }: { plus: boolean; size: number; onPress: () => void; disabled: boolean; label: string }) {
-  return (
-    <Pressable
-      onPress={onPress}
-      disabled={disabled}
-      hitSlop={6}
-      accessibilityRole="button"
-      accessibilityLabel={label}
-      style={({ pressed }) => [styles.stepBtn, { width: size * 2.2, height: size * 2.2 }, disabled && styles.tileOff, pressed && styles.pressed]}
-    >
-      <Svg width={size} height={size} viewBox="0 0 24 24">
-        <Path d={plus ? 'M5 12h14M12 5v14' : 'M5 12h14'} stroke={mono.text} strokeWidth={2.2} strokeLinecap="round" />
-      </Svg>
-    </Pressable>
-  );
-}
-
 const styles = StyleSheet.create({
   root: { flex: 1, backgroundColor: colors.bg },
   area: { position: 'absolute' },
@@ -889,8 +842,5 @@ const styles = StyleSheet.create({
   tileLabelRed: { color: mono.red },
   tileLabel: { fontFamily: fonts.monoBold, color: mono.text, letterSpacing: 1, textTransform: 'uppercase' },
   tileHint: { fontFamily: fonts.mono, color: mono.soft },
-  stepper: { flexDirection: 'row', alignItems: 'center' },
-  stepBtn: { borderRadius: 999, borderWidth: 1, borderColor: '#444', alignItems: 'center', justifyContent: 'center' },
-  volume: { fontFamily: fonts.mono, color: mono.text, textAlign: 'center' },
   pressed: { opacity: 0.6 },
 });
