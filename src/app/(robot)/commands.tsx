@@ -72,6 +72,7 @@ import { validPoseName } from '../../lib/arm';
 import { useRobot } from '../../lib/robot';
 import { ArmSetupPanel, type ArmReport, type NameRequest } from '../../ui/ArmSetupPanel';
 import { CommandIcon, type CommandIconName } from '../../ui/CommandIcon';
+import { Joystick, joystickSize } from '../../ui/Joystick';
 import { ChoiceDialog, CommandBox, TextDialog, type Box, type ChoiceField } from '../../ui/CommandDialogs';
 import { ConfirmDialog, type ConfirmRequest } from '../../ui/ConfirmDialog';
 import { NameDialog } from '../../ui/NameDialog';
@@ -514,7 +515,8 @@ export default function CommandsScreen() {
   const buttons = task ? taskButtons(task) : [];
 
   const TILES: Record<Exclude<Group, 'armSetup'>, Tile[]> = {
-    // the main commands, most used first, Go charge at the very top (owner, 2026-11-23): with all of MOVING and TALKING (those groups are gone)
+    // the main commands, most used first: Go charge, Wave, Sing, Follow me, Go to, then the rest (owner, 2026-11-23);
+    // with all of MOVING and TALKING (those groups are gone)
     arm: [
       {
         icon: 'dock',
@@ -523,18 +525,28 @@ export default function CommandsScreen() {
         onPress: () => go({ label: 'cmdDock', req: goRequest(DOCK_MARKER), ask: t('cmdAskDock') }),
       },
       {
-        icon: 'come',
-        label: 'cmdCome',
-        hint: 'cmdComeHint',
-        needs: ['patrol'],
-        onPress: () => go({ label: 'cmdCome', req: comeRequest, ask: t('cmdAskCome') }),
+        icon: 'wave',
+        label: 'cmdWave',
+        hint: 'cmdWaveHint',
+        needs: ['arm'],
+        onPress: () => go({ label: 'cmdWave', req: waveRequest, ask: t('cmdAskWave'), waits: true }),
       },
+      // without the proposed /sing only the assistant sings (Greeter or Patrol on)
+      { icon: 'sing', label: 'cmdSing', hint: 'cmdSingHint', needs: songs === null ? ['modes'] : [], onPress: () => open('sing', { song: 'any' }) },
       {
         icon: 'follow',
         label: 'cmdFollow',
         hint: 'cmdFollowHint',
         needs: ['patrol'],
         onPress: () => go({ label: 'cmdFollow', req: followRequest, ask: t('cmdAskFollow') }),
+      },
+      { icon: 'goto', label: 'cmdGoTo', hint: 'cmdGoToHint', onPress: () => open('goto', { marker: firstMarker }) },
+      {
+        icon: 'come',
+        label: 'cmdCome',
+        hint: 'cmdComeHint',
+        needs: ['patrol'],
+        onPress: () => go({ label: 'cmdCome', req: comeRequest, ask: t('cmdAskCome') }),
       },
       { icon: 'pick', label: 'cmdPick', hint: 'cmdPickHint', needs: ['modes', 'arm', 'empty'], onPress: () => openPick() },
       {
@@ -569,19 +581,9 @@ export default function CommandsScreen() {
         needs: ['patrol', 'arm', 'holding'],
         onPress: () => open('carry', { to: firstMarker, then: 'hold' }),
       },
-      { icon: 'goto', label: 'cmdGoTo', hint: 'cmdGoToHint', onPress: () => open('goto', { marker: firstMarker }) },
       { icon: 'say', label: 'cmdSay', hint: 'cmdSayHint', onPress: () => setText('say') },
       { icon: 'ask', label: 'cmdAsk', hint: 'cmdAskHint', onPress: () => setText('ask') },
       { icon: 'aside', label: 'cmdAside', hint: 'cmdAsideHint', needs: ['arm', 'empty'], onPress: () => openSeen('aside') },
-      {
-        icon: 'wave',
-        label: 'cmdWave',
-        hint: 'cmdWaveHint',
-        needs: ['arm'],
-        onPress: () => go({ label: 'cmdWave', req: waveRequest, ask: t('cmdAskWave'), waits: true }),
-      },
-      // without the proposed /sing only the assistant sings (Greeter or Patrol on)
-      { icon: 'sing', label: 'cmdSing', hint: 'cmdSingHint', needs: songs === null ? ['modes'] : [], onPress: () => open('sing', { song: 'any' }) },
       { icon: 'look', label: 'cmdLook', hint: 'cmdLookHint', onPress: () => open('look', { dir: 'centre' }) },
       { icon: 'turn', label: 'cmdTurn', hint: 'cmdTurnHint', needs: ['patrol'], onPress: () => open('turn', { way: 'left' }) },
       { icon: 'drive', label: 'cmdDrive', hint: 'cmdDriveHint', needs: ['patrol'], onPress: () => open('drive', { dir: 'forward', m: '0.5' }) },
@@ -606,15 +608,21 @@ export default function CommandsScreen() {
   const modesText = clamp(13, 0.024 * h, 18); // ModesPanel's sizes: its switches stay clear
   const switchW = clamp(36, 0.06 * h, 46);
   const left = 26 + inset.left + 16 + 10 + modesText * 1.6 + modesText * 6.4 + switchW + 16;
-  const right = 24 + inset.right + (task ? clamp(220, 0.42 * h, 340) + 12 : clamp(11, 0.019 * h, 15) * 7 + 12);
+  // the joystick bottom right (owner, 2026-11-23) keeps the tiles clear of it, as the readings or the task card do
+  const right = 24 + inset.right + Math.max(task ? clamp(220, 0.42 * h, 340) + 12 : clamp(11, 0.019 * h, 15) * 7 + 12, joystickSize(h) + 16);
   const top = 14 + inset.top + Math.max(44, 0.075 * h);
   const bottom = 18 + inset.bottom + DOCK_SPACE;
   const area: Box = { left, right, top, bottom };
   const inner = Math.max(200, w - left - right);
   const gap = size * 0.6;
-  const cols = clamp(2, Math.floor((inner + gap) / (size * 9.5 + gap)), 5);
-  const tileW = (inner - gap * (cols - 1)) / cols;
-  const taskW = (inner - gap * (TASK_TILES.length - 1)) / TASK_TILES.length;
+  // tiles from 6.8 text sizes wide: five in a row on the tablet beside the joystick too (owner, 2026-11-23; a
+  // 1024 x 600 tablet leaves about 600 px between the modes and the joystick)
+  const cols = clamp(2, Math.floor((inner + gap) / (size * 6.8 + gap)), 5);
+  // whole pixels with one to spare per tile: an exact fraction rounds up on a tablet and the last tile of a row
+  // drops to the next one (owner, 2026-11-23: four in a row where five fit)
+  const fit = (n: number) => Math.floor((inner - gap * (n - 1)) / n) - 1;
+  const tileW = fit(cols);
+  const taskW = fit(TASK_TILES.length);
 
   const statusLine = (): { dot: string; head: string; words: string } => {
     if (group === 'armSetup' && power.note) return { dot: mono.yellow, head: t('cmdGroupArmSetup'), words: t(power.note) };
@@ -759,6 +767,7 @@ export default function CommandsScreen() {
         )}
       </View>
 
+      <Joystick />
       {choice && (
         <ChoiceDialog
           box={area}

@@ -60,12 +60,15 @@ function DotRing({ size, locked }: { size: number; locked: boolean }) {
   );
 }
 
+/** The pad's width (and height): screens beside it keep this much free on the right. */
+export const joystickSize = (h: number) => clamp(120, 0.27 * h, 200);
+
 export function Joystick() {
   const { t } = useI18n();
   const { connection } = useRobot();
   const { height: h } = useWindowDimensions();
   const inset = useSafeAreaInsets();
-  const size = clamp(120, 0.27 * h, 200);
+  const size = joystickSize(h);
   const radius = size / 2;
   const knob = size * 0.34;
   const sliderW = size + 20;
