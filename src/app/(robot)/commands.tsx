@@ -514,8 +514,14 @@ export default function CommandsScreen() {
   const buttons = task ? taskButtons(task) : [];
 
   const TILES: Record<Exclude<Group, 'armSetup'>, Tile[]> = {
-    // the main commands, most used first (owner, 2026-11-23): with all of MOVING and TALKING (those groups are gone)
+    // the main commands, most used first, Go charge at the very top (owner, 2026-11-23): with all of MOVING and TALKING (those groups are gone)
     arm: [
+      {
+        icon: 'dock',
+        label: 'cmdDock',
+        hint: 'cmdDockHint',
+        onPress: () => go({ label: 'cmdDock', req: goRequest(DOCK_MARKER), ask: t('cmdAskDock') }),
+      },
       {
         icon: 'come',
         label: 'cmdCome',
@@ -564,12 +570,6 @@ export default function CommandsScreen() {
         onPress: () => open('carry', { to: firstMarker, then: 'hold' }),
       },
       { icon: 'goto', label: 'cmdGoTo', hint: 'cmdGoToHint', onPress: () => open('goto', { marker: firstMarker }) },
-      {
-        icon: 'dock',
-        label: 'cmdDock',
-        hint: 'cmdDockHint',
-        onPress: () => go({ label: 'cmdDock', req: goRequest(DOCK_MARKER), ask: t('cmdAskDock') }),
-      },
       { icon: 'say', label: 'cmdSay', hint: 'cmdSayHint', onPress: () => setText('say') },
       { icon: 'ask', label: 'cmdAsk', hint: 'cmdAskHint', onPress: () => setText('ask') },
       { icon: 'aside', label: 'cmdAside', hint: 'cmdAsideHint', needs: ['arm', 'empty'], onPress: () => openSeen('aside') },

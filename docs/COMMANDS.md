@@ -41,7 +41,8 @@ are plain functions in `src/lib/commands.ts`, tested in `src/lib/__tests__/comma
 
 | Group | Tile | Choice | Sends | Needs |
 |---|---|---|---|---|
-| Arm & objects | Come here | | `POST /tasks/command` `{text: "come here"}` | Patrol |
+| Arm & objects | Go charge | | `POST /agv/go` `{marker: "home"}`: the Thor drives to the charger marker named Home (any case), else the map's first charger marker (lowest dock number), so a new map's charger is Go charge as soon as it is marked; other chargers (charge, dock2) keep their names (Thor `robot/agv.py dock_marker`) | |
+| | Come here | | `POST /tasks/command` `{text: "come here"}` | Patrol |
 | | Follow me | | `POST /tasks/command` `{text: "follow me"}` | Patrol |
 | | Pick up | object | `POST /tasks/steps` `[{do: pick, object, colour}]` (as voice reads "pick up the cup") | Greeter or Patrol, arm, empty hand |
 | | Give | | `POST /tasks/give` (arm to the `give` pose) | Greeter or Patrol, arm, holding |
@@ -50,7 +51,6 @@ are plain functions in `src/lib/commands.ts`, tested in `src/lib/__tests__/comma
 | | Fetch | object, from (here or a marker), to (here or a marker), there: keep holding or put on a table | `POST /tasks/fetch` `{object, colour, source, dest, finish}` | Patrol, arm, empty hand |
 | | Carry it | marker, then: keep holding, put on a table, hand it over | `POST /tasks/carry` `{dest: {marker}, then, on: null}` | Patrol, arm, holding |
 | | Go to | marker | `POST /agv/go` `{marker}` | |
-| | Go charge | | `POST /agv/go` `{marker: "home"}` | |
 | | Say | text | `POST /say` `{text}`; while the assistant runs (it owns the speaker and `/say` is refused) a mission `[{do: say, text}]` | |
 | | Ask | text | `POST /ask` `{question, speak: true}` (the answer is shown too); while the assistant runs `POST /tasks/command` with the question | |
 | | Move object (pick it up, put it down at a free spot nearby) | object | `POST /skills/move` `{object, colour}`, watched on `GET /skills/state` | arm, empty hand |
