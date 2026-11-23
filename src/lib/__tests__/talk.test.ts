@@ -10,6 +10,7 @@ import {
   talkState,
   toSinging,
   toTalk,
+  toTalkErrors,
 } from '../talk';
 
 // lines as lumi.log has them (GET /assistant/log on the Thor, 2026-11-23)
@@ -185,5 +186,15 @@ describe('what Talk sends', () => {
       body: { steps: [{ do: 'say', text: '안녕하세요' }], lang: 'ko' },
     });
     expect(askRequest('What can you do', modes({ patrol: true }))).toMatchObject({ path: '/tasks/command', body: { text: 'What can you do' } });
+  });
+});
+
+describe('assistant errors', () => {
+  it('reads the error lines and a stuck loop from /assistant/status', () => {
+    expect(toTalkErrors({ errors: ['18:01:02 whisper failed: timeout', '', 3], stuck: true })).toEqual({
+      lines: ['18:01:02 whisper failed: timeout'],
+      stuck: true,
+    });
+    expect(toTalkErrors(null)).toEqual({ lines: [], stuck: false });
   });
 });

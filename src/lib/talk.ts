@@ -207,13 +207,15 @@ export function toSinging(raw: unknown): string | null {
 }
 
 // ---------- quick phrases ----------
-/** Said at once on a tap, in the language chosen for Lumi's voice. */
-export const PHRASES: TextKey[] = [
-  'talkPhraseHello',
-  'talkPhraseWelcome',
-  'talkPhraseFollow',
-  'talkPhraseWait',
-  'talkPhraseExcuse',
-  'talkPhraseThanks',
-  'talkPhraseBye',
-];
+
+/** The assistant's trouble (GET /assistant/status): its log's lines with an error, failed, stuck, refused, cannot or
+ *  traceback in them (newest last), and whether its main loop is stuck; nothing when the reply has none. */
+export interface TalkErrors {
+  lines: string[];
+  stuck: boolean;
+}
+export function toTalkErrors(raw: unknown): TalkErrors {
+  const r = raw as { errors?: unknown; stuck?: unknown } | null;
+  const lines = Array.isArray(r?.errors) ? r.errors.filter((l): l is string => typeof l === 'string' && l.trim() !== '') : [];
+  return { lines, stuck: r?.stuck === true };
+}

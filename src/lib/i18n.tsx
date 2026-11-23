@@ -522,16 +522,10 @@ const en = {
   talkLangKo: 'KO',
   talkSong: 'Song: {song}',
   talkAllWords: 'All words',
-  talkPlaceholder: 'Words for Lumi to say or a question',
-  talkVoice: 'Voice',
-  talkPhrases: 'Quick words',
-  talkPhraseHello: 'Hello, I am Lumi.',
-  talkPhraseWelcome: 'Welcome! Nice to see you.',
-  talkPhraseFollow: 'Please follow me.',
-  talkPhraseWait: 'One moment please.',
-  talkPhraseExcuse: 'Excuse me, coming through.',
-  talkPhraseThanks: 'Thank you!',
-  talkPhraseBye: 'Goodbye! See you again.',
+  talkErrors: 'Errors',
+  talkErrorsCount: 'Errors {n}',
+  talkNoErrors: 'No errors lately',
+  talkStuck: "The assistant's main loop is stuck",
 };
 
 export type TextKey = keyof typeof en;
@@ -1038,16 +1032,10 @@ const ko: Record<TextKey, string> = {
   talkLangKo: 'KO',
   talkSong: '노래: {song}',
   talkAllWords: '모든 말',
-  talkPlaceholder: 'Lumi가 할 말이나 질문',
-  talkVoice: '목소리',
-  talkPhrases: '빠른 말',
-  talkPhraseHello: '안녕하세요, 저는 루미예요.',
-  talkPhraseWelcome: '어서 오세요! 반가워요.',
-  talkPhraseFollow: '저를 따라오세요.',
-  talkPhraseWait: '잠시만 기다려 주세요.',
-  talkPhraseExcuse: '실례합니다, 지나갈게요.',
-  talkPhraseThanks: '감사합니다!',
-  talkPhraseBye: '안녕히 가세요! 또 만나요.',
+  talkErrors: '오류',
+  talkErrorsCount: '오류 {n}',
+  talkNoErrors: '최근 오류가 없어요',
+  talkStuck: '어시스턴트의 메인 루프가 멈췄어요',
 };
 
 const STRINGS: Record<Lang, Record<TextKey, string>> = { en, ko };
