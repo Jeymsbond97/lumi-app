@@ -128,9 +128,11 @@ export const LEGACY_POSE_SPEED = 'slow';
 /** /arm/pose answers once the arm is there; slow moves along the graph can take this long. */
 const POSE_TIMEOUT_MS = 120000;
 
-/** `legacy`: the robot has no /arm/speed, so the pose goes slowly as it always did. */
-export const goPose = (baseUrl: string, name: string, legacy = false) =>
-  orBusy(post(baseUrl, '/arm/pose', legacy ? { name, speed: LEGACY_POSE_SPEED } : { name }, POSE_TIMEOUT_MS));
+/** `legacy`: the robot has no /arm/speed, so the pose goes slowly as it always did. A refusal comes back with the
+ *  robot's reason (409: the route is not safe, e.g. too close to the head; 5xx: the arm controller dropped the call),
+ *  so the line says why instead of "did not answer" (owner, 2026-11-23). */
+export const goPose = (baseUrl: string, name: string, legacy = false): Promise<Reply> =>
+  send(baseUrl, { path: '/arm/pose', body: legacy ? { name, speed: LEGACY_POSE_SPEED } : { name }, timeoutMs: POSE_TIMEOUT_MS });
 
 /** A pose name the robot takes: 1 to 24 letters, digits, _ or -, around spaces trimmed. */
 export const validPoseName = (name: string): boolean => /^[A-Za-z0-9_-]{1,24}$/.test(name.trim());

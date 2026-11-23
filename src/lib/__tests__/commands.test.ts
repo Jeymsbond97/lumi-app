@@ -49,6 +49,8 @@ describe('reasonOf', () => {
   it('names the refusals people meet most in both languages', () => {
     expect(reasonKey('Switch on Greeter or Patrol first.')).toBe('cmdNeedModes');
     expect(reasonKey("I can't drive or turn my waist right now. Switch on Patrol for that.")).toBe('cmdNeedPatrol');
+    expect(reasonKey("That would bring my hand too close to my head, so I won't move my arm.")).toBe('armNearHead');
+    expect(reasonKey("I can't move my arm there safely.")).toBe('armBlocked');
     expect(reasonKey('Busy with a task. Pause or stop it first.')).toBe('busy');
     expect(reasonKey('The cup is too far')).toBeNull();
   });

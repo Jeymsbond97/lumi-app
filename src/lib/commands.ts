@@ -68,6 +68,10 @@ const KNOWN_REASONS: [RegExp, TextKey][] = [
   [/owns the robot/i, 'cmdAssistantOwns'],
   [/arm not ready/i, 'cmdNeedArm'],
   [/hand is empty|not holding anything/i, 'cmdNeedHolding'],
+  // Thor manipulation/arm_route.py RouteError texts (English only on the wire)
+  [/too close to my head/i, 'armNearHead'],
+  [/position I don't know/i, 'armUnknownPose'],
+  [/can't move my arm there safely/i, 'armBlocked'],
 ];
 
 export function reasonKey(reason: string | null): TextKey | null {

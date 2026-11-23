@@ -256,11 +256,12 @@ export function ArmSetupPanel({
             stoppedDuringPose.current = false;
             onReport({ label: 'armSetupPoses', phase: 'sending' });
             goPose(url, name, legacy)
-              .then(() => note('armSetupPoses', 'armPoseDone', 'done'))
-              .catch((e) => {
+              .then((r) => {
+                if (r.ok) return note('armSetupPoses', 'armPoseDone', 'done');
                 // a move stopped with STOP ARM comes back refused; the stop has said so already
                 if (stoppedDuringPose.current) return;
-                note('armSetupPoses', e instanceof Error && /HTTP 4\d\d$/.test(e.message) ? 'armPoseRefused' : 'noAnswer');
+                if (r.status >= 500) return note('armSetupPoses', 'armControllerLost');
+                refused('armSetupPoses', r, 'armPoseRefused');
               })
               .finally(() => setPosing(null));
           },
