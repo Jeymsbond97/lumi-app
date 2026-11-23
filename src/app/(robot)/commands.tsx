@@ -614,6 +614,7 @@ export default function CommandsScreen() {
   const gap = size * 0.6;
   const cols = clamp(2, Math.floor((inner + gap) / (size * 9.5 + gap)), 5);
   const tileW = (inner - gap * (cols - 1)) / cols;
+  const taskW = (inner - gap * (TASK_TILES.length - 1)) / TASK_TILES.length;
 
   const statusLine = (): { dot: string; head: string; words: string } => {
     if (group === 'armSetup' && power.note) return { dot: mono.yellow, head: t('cmdGroupArmSetup'), words: t(power.note) };
@@ -723,6 +724,8 @@ export default function CommandsScreen() {
                   </View>
                 );
               const why = tile.off ?? blocked(tile.needs ?? [], ready);
+              // MISSIONS' task buttons: one row filling the width, icon beside the word
+              const row = group === 'mission';
               return (
                 <Pressable
                   key={tile.label}
@@ -732,19 +735,16 @@ export default function CommandsScreen() {
                   accessibilityHint={why ? t(why) : tile.hint && t(tile.hint)}
                   style={({ pressed }) => [
                     styles.tile,
-                    {
-                      width: tile.wide ? inner : tileW,
-                      minHeight: size * 5.6,
-                      padding: size * 0.8,
-                      gap: size * 0.35,
-                    },
+                    row
+                      ? [styles.tileRow, { width: taskW, minHeight: size * 3.4, padding: size * 0.7, gap: size * 0.6 }]
+                      : { width: tile.wide ? inner : tileW, minHeight: size * 5.6, padding: size * 0.8, gap: size * 0.35 },
                     tile.red && styles.tileRed,
-                    !!why && styles.tileOff,
+                    !!why && (row ? styles.tileRowOff : styles.tileOff),
                     pressed && styles.pressed,
                   ]}
                 >
-                  <CommandIcon name={tile.icon} size={size * 1.7} color={tile.red && !why ? mono.red : mono.text} />
-                  <Text style={[styles.tileLabel, { fontSize: size * 0.92 }]} numberOfLines={2}>
+                  <CommandIcon name={tile.icon} size={size * (row ? 1.3 : 1.7)} color={tile.red && !why ? mono.red : mono.text} />
+                  <Text style={[styles.tileLabel, { fontSize: size * 0.92 }, tile.red && !why && styles.tileLabelRed]} numberOfLines={row ? 1 : 2}>
                     {t(tile.label)}
                   </Text>
                   {tile.hint && (
@@ -852,6 +852,9 @@ const styles = StyleSheet.create({
   },
   tileRed: { borderColor: 'rgba(255,45,45,0.55)' },
   tileOff: { opacity: 0.38 },
+  tileRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', borderColor: '#4a4a4a' },
+  tileRowOff: { opacity: 0.8 },
+  tileLabelRed: { color: mono.red },
   tileLabel: { fontFamily: fonts.monoBold, color: mono.text, letterSpacing: 1, textTransform: 'uppercase' },
   tileHint: { fontFamily: fonts.mono, color: mono.soft },
   stepper: { flexDirection: 'row', alignItems: 'center' },

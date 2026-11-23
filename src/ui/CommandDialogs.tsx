@@ -39,7 +39,22 @@ function Sheet({ box, size, onClose, children }: { box: Box; size: number; onClo
   );
 }
 
-function Button({ text, size, onPress, disabled, muted }: { text: string; size: number; onPress: () => void; disabled?: boolean; muted?: boolean }) {
+function Button({
+  text,
+  size,
+  onPress,
+  disabled,
+  muted,
+  primary,
+}: {
+  text: string;
+  size: number;
+  onPress: () => void;
+  disabled?: boolean;
+  muted?: boolean;
+  /** Filled white: the one button the card is for (MISSIONS' START). */
+  primary?: boolean;
+}) {
   return (
     <Pressable
       onPress={onPress}
@@ -50,11 +65,13 @@ function Button({ text, size, onPress, disabled, muted }: { text: string; size: 
       style={({ pressed }) => [
         styles.button,
         { height: size * 2.6, paddingHorizontal: size * 1.2, borderColor: muted ? mono.dim : mono.text },
-        disabled && styles.disabled,
+        primary && { paddingHorizontal: size * 1.8 },
+        primary && !disabled && styles.primary,
+        disabled && (primary ? styles.primaryOff : styles.disabled),
         pressed && styles.pressed,
       ]}
     >
-      <Text style={[styles.buttonText, { fontSize: size * 0.9, color: muted ? mono.soft : mono.text }]}>{text}</Text>
+      <Text style={[styles.buttonText, { fontSize: size * 0.9, color: primary && !disabled ? '#0a0a0a' : muted ? mono.soft : mono.text }]}>{text}</Text>
     </Pressable>
   );
 }
@@ -324,10 +341,11 @@ export function CommandBox({
         )}
       </View>
       <Buttons size={size}>
-        <Button text={t('cmdClear')} size={size} onPress={() => setText('')} disabled={!text} muted />
+        {!!text && <Button text={t('cmdClear')} size={size} onPress={() => setText('')} muted />}
         <Button
           text={t('cmdStart')}
           size={size}
+          primary
           onPress={() => {
             if (!parsed) return;
             onStart(parsed);
@@ -386,5 +404,7 @@ const styles = StyleSheet.create({
   button: { borderRadius: 999, borderWidth: 1.5, alignItems: 'center', justifyContent: 'center' },
   buttonText: { fontFamily: fonts.monoBold, letterSpacing: 1, textTransform: 'uppercase' },
   disabled: { opacity: 0.35 },
+  primary: { backgroundColor: mono.text, borderColor: mono.text },
+  primaryOff: { borderColor: mono.soft, opacity: 0.85 },
   pressed: { opacity: 0.6 },
 });
