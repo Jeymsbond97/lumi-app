@@ -63,6 +63,7 @@ export default function RobotLayout() {
             <Tabs.Screen name="commands" />
             <Tabs.Screen name="map" />
             <Tabs.Screen name="drive" />
+            <Tabs.Screen name="talk" />
           </Tabs>
           <Controls />
         </View>

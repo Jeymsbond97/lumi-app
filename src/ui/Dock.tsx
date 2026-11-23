@@ -22,7 +22,7 @@ export const SECTIONS: Section[] = [
   { label: 'tabCommands', route: '/commands', path: '/commands' },
   { label: 'tabDrive', route: '/drive', path: '/drive' },
   { label: 'tabMap', route: '/map', path: '/map' },
-  { label: 'tabTalk', route: null, path: '/talk' },
+  { label: 'tabTalk', route: '/talk', path: '/talk' },
 ];
 
 export function Dock() {
