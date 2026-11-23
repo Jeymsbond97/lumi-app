@@ -5,7 +5,8 @@ import {
   carryRequest,
   fetchRequest,
   fill,
-  lookRequest,
+  lookStep,
+  headPoseOf,
   parsedMoves,
   parsedStart,
   pickRequest,
@@ -151,11 +152,21 @@ describe('requests', () => {
   });
 
   it('looks left with a positive yaw, and up or down keeping the yaw the head has', () => {
-    expect(lookRequest('left', 10).body).toEqual({ yaw: 40 });
-    expect(lookRequest('right', null).body).toEqual({ yaw: -40 });
-    expect(lookRequest('up', 12).body).toEqual({ yaw: 12, pitch: 20 });
-    expect(lookRequest('down', null).body).toEqual({ yaw: 0, pitch: -5 });
-    expect(lookRequest('centre', 30).body).toEqual({ yaw: 0, pitch: -5 });
+    const body = (x: ReturnType<typeof lookStep>) => ('req' in x ? x.req.body : x);
+    // a step from where the head is: two from the bottom reach the top
+    expect(body(lookStep('up', 0, -5))).toEqual({ yaw: 0, pitch: 15 });
+    expect(lookStep('up', 0, 15)).toMatchObject({ req: { body: { yaw: 0, pitch: 35 } }, edge: 'top' });
+    expect(lookStep('up', 0, 35)).toEqual({ reached: 'top' });
+    expect(lookStep('down', 12, -5)).toEqual({ reached: 'bottom' });
+    expect(body(lookStep('down', 12, 35))).toEqual({ yaw: 12, pitch: 15 });
+    // sides in steps of 20 to 60; + yaw is Lumi's left
+    expect(body(lookStep('left', 10, 0))).toEqual({ yaw: 30 });
+    expect(lookStep('left', 50, 0)).toMatchObject({ req: { body: { yaw: 60 } }, edge: 'left' });
+    expect(lookStep('right', -60, 0)).toEqual({ reached: 'right' });
+    expect(body(lookStep('right', null, null))).toEqual({ yaw: -20 });
+    expect(body(lookStep('centre', 30, 20))).toEqual({ yaw: 0, pitch: -5 });
+    expect(headPoseOf({ body: { head_yaw_deg: 20, head_pitch_deg: -5 } })).toEqual({ yaw: 20, pitch: -5 });
+    expect(headPoseOf({})).toBeNull();
   });
 
   it('says and asks through the assistant while it runs (it owns the speaker), else directly', () => {

@@ -4,7 +4,7 @@
 // (sent, refused and why; "Done" for DONE_SHOWN_MS, then it goes), and what Lumi is doing; the task card on the right has Pause, Release and Stop as on every screen. Missions
 // has the typed command box: read as voice reads it first.
 // The content sits between the modes on the left, the task card on the right, the power chips on top and the Dock.
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { Pressable, ScrollView, StyleSheet, Text, useWindowDimensions, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useIsFocused } from 'expo-router';
@@ -24,7 +24,9 @@ import {
   followRequest,
   giveRequest,
   goRequest,
-  lookRequest,
+  lookStep,
+  headPoseOf,
+  type LookEdge,
   parsedMoves,
   parsedStart,
   pickRequest,
@@ -69,7 +71,7 @@ import { ArmSetupPanel, type ArmReport, type NameRequest } from '../../ui/ArmSet
 import { CommandIcon, type CommandIconName } from '../../ui/CommandIcon';
 import { Joystick, joystickSize } from '../../ui/Joystick';
 import { VolumeButton } from '../../ui/VolumeButton';
-import { ChoiceDialog, CommandBox, TextDialog, type Box, type ChoiceField } from '../../ui/CommandDialogs';
+import { ChoiceDialog, LookPad, CommandBox, TextDialog, type Box, type ChoiceField } from '../../ui/CommandDialogs';
 import { ConfirmDialog, type ConfirmRequest } from '../../ui/ConfirmDialog';
 import { NameDialog } from '../../ui/NameDialog';
 import { usePowerSwitch } from '../../ui/usePowerSwitch';
@@ -89,7 +91,7 @@ const GROUPS: { key: Group; label: TextKey }[] = [
   { key: 'armSetup', label: 'cmdGroupArmSetup' },
 ];
 
-type ChoiceKind = 'pick' | 'receive' | 'aside' | 'goto' | 'fetch' | 'carry' | 'drive' | 'turn' | 'look' | 'sing';
+type ChoiceKind = 'pick' | 'receive' | 'aside' | 'goto' | 'fetch' | 'carry' | 'drive' | 'turn' | 'sing';
 
 /** One tap's request: `ask` is the question before it moves anything; `waits` it answers when done. */
 interface Run {
@@ -146,13 +148,12 @@ const TURNS: { id: TurnWay; label: TextKey; ask: TextKey }[] = [
   { id: 'right', label: 'cmdTurnRight', ask: 'cmdAskTurnRight' },
   { id: 'around', label: 'cmdTurnAround', ask: 'cmdAskTurnAround' },
 ];
-const LOOKS: { id: LookDir; label: TextKey }[] = [
-  { id: 'left', label: 'cmdLookLeft' },
-  { id: 'right', label: 'cmdLookRight' },
-  { id: 'up', label: 'cmdLookUp' },
-  { id: 'down', label: 'cmdLookDown' },
-  { id: 'centre', label: 'cmdLookAhead' },
-];
+const REACHED: Record<LookEdge, TextKey> = {
+  top: 'cmdReachedTop',
+  bottom: 'cmdReachedBottom',
+  left: 'cmdReachedLeft',
+  right: 'cmdReachedRight',
+};
 const CHOICE_TITLE: Record<ChoiceKind, TextKey> = {
   pick: 'cmdPick',
   receive: 'cmdReceive',
@@ -162,7 +163,6 @@ const CHOICE_TITLE: Record<ChoiceKind, TextKey> = {
   carry: 'cmdCarry',
   drive: 'cmdDrive',
   turn: 'cmdTurn',
-  look: 'cmdLook',
   sing: 'cmdSing',
 };
 const SKILL_TEXT: Record<SkillState['status'], TextKey> = {
@@ -198,6 +198,9 @@ export default function CommandsScreen() {
     setLasts((prev) => ({ ...prev, [g]: typeof next === 'function' ? next(prev[g]) : next }));
   }, []);
   const [choice, setChoice] = useState<ChoiceKind | null>(null);
+  const [looking, setLooking] = useState(false); // LOOK's direction pad
+  /** The head's pose from the last /head/turn answer: quick taps step on from there, not from the 1 s status. */
+  const headPose = useRef<{ yaw: number; pitch: number } | null>(null);
   const [values, setValues] = useState<Record<string, string>>({});
   const [confirm, setConfirm] = useState<ConfirmRequest | null>(null);
   const [text, setText] = useState<'say' | 'ask' | 'pick' | null>(null);
@@ -272,7 +275,6 @@ export default function CommandsScreen() {
 
   const ready = { modes, armOn: status?.armState === 'enabled', holding };
   const body = status?.body ?? null;
-  const headYaw = bodyPoseKnown(body) ? body.headYawDeg : null;
 
   // ---------- sending ----------
   const fire = useCallback(
@@ -281,17 +283,32 @@ export default function CommandsScreen() {
       const at = Date.now();
       const g = group; // the answer goes to the group it was sent from, even if another one is open by then
       put(g, { label: r.label, at, skill: !!r.skill, key: null, phase: 'sending', reason: null, answer: null });
-      send(url, r.req).then((reply) => {
+      return send(url, r.req).then((reply) => {
         const out = toOutcome(reply, !!r.waits);
         const answeredAt = Date.now();
         const doneAt = out.phase === 'done' ? answeredAt : undefined;
         // a newer tap's line stays
         put(g, (prev) => (prev && prev.at !== at ? prev : { label: r.label, at, skill: !!r.skill, key: null, ...out, doneAt, answeredAt }));
+        return reply;
       });
     },
     [url, put, group],
   );
 
+  /** LOOK's tap: a step from where the head is; the words to show in the pad when it is at an end (or got there). */
+  const lookAt = async (dir: LookDir): Promise<string | null> => {
+    const known = bodyPoseKnown(body) ? { yaw: body.headYawDeg, pitch: body.headPitchDeg } : null;
+    const pose = headPose.current ?? known;
+    const step = lookStep(dir, pose?.yaw ?? null, pose?.pitch ?? null);
+    if ('reached' in step) {
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning).catch(() => {});
+      return t(REACHED[step.reached]);
+    }
+    const reply = await fire({ label: 'cmdLook', req: step.req, waits: true });
+    if (!reply.ok) return null; // the status line says why
+    headPose.current = headPoseOf(reply.data) ?? headPose.current;
+    return step.edge ? t(REACHED[step.edge]) : null;
+  };
   const go = (r: Run) => {
     if (!r.ask) return fire(r);
     setConfirm({ title: r.ask, choices: [{ text: t('cmdGo'), onPress: () => fire(r) }] });
@@ -432,8 +449,6 @@ export default function CommandsScreen() {
         ];
       case 'turn':
         return [{ key: 'way', title: 'cmdChooseTurn', options: TURNS.map((x) => ({ id: x.id, label: t(x.label) })) }];
-      case 'look':
-        return [{ key: 'dir', title: 'cmdChooseLook', options: LOOKS.map((x) => ({ id: x.id, label: t(x.label) })) }];
       case 'sing':
         return [
           {
@@ -483,8 +498,6 @@ export default function CommandsScreen() {
         const way = TURNS.find((x) => x.id === v.way);
         return way ? { label: 'cmdTurn', req: turnRequest(way.id, lang), ask: t(way.ask) } : null;
       }
-      case 'look':
-        return { label: 'cmdLook', req: lookRequest(v.dir as LookDir, headYaw), waits: true };
       case 'sing':
         return { label: 'cmdSing', req: singRequest((songs ?? []).find((s) => s.id === v.song) ?? null, songs !== null) };
     }
@@ -525,7 +538,8 @@ export default function CommandsScreen() {
   const buttons = task ? taskButtons(task) : [];
 
   const TILES: Record<Exclude<Group, 'armSetup'>, Tile[]> = {
-    // the main commands, most used first: Go charge, Wave, Sing, Follow me, Go to, then the rest (owner, 2026-11-23);
+    // the main commands, most used first: Go charge, Wave, Sing, Follow me, Go to; Look first in the next row; then the
+    // rest (owner, 2026-11-23);
     // with all of MOVING and TALKING (those groups are gone); Volume is the edge button (ui/VolumeButton)
     arm: [
       {
@@ -551,6 +565,7 @@ export default function CommandsScreen() {
         onPress: () => go({ label: 'cmdFollow', req: followRequest, ask: t('cmdAskFollow') }),
       },
       { icon: 'goto', label: 'cmdGoTo', hint: 'cmdGoToHint', onPress: () => open('goto', { marker: firstMarker }) },
+      { icon: 'look', label: 'cmdLook', hint: 'cmdLookHint', onPress: () => setLooking(true) },
       {
         icon: 'come',
         label: 'cmdCome',
@@ -594,7 +609,6 @@ export default function CommandsScreen() {
       { icon: 'say', label: 'cmdSay', hint: 'cmdSayHint', onPress: () => setText('say') },
       { icon: 'ask', label: 'cmdAsk', hint: 'cmdAskHint', onPress: () => setText('ask') },
       { icon: 'aside', label: 'cmdAside', hint: 'cmdAsideHint', needs: ['arm', 'empty'], onPress: () => openSeen('aside') },
-      { icon: 'look', label: 'cmdLook', hint: 'cmdLookHint', onPress: () => open('look', { dir: 'centre' }) },
       { icon: 'turn', label: 'cmdTurn', hint: 'cmdTurnHint', needs: ['patrol'], onPress: () => open('turn', { way: 'left' }) },
       { icon: 'drive', label: 'cmdDrive', hint: 'cmdDriveHint', needs: ['patrol'], onPress: () => open('drive', { dir: 'forward', m: '0.5' }) },
     ],
@@ -763,6 +777,16 @@ export default function CommandsScreen() {
 
       <Joystick />
       <VolumeButton active={focused} />
+      {looking && (
+        <LookPad
+          size={size}
+          onLook={lookAt}
+          onClose={() => {
+            setLooking(false);
+            headPose.current = null;
+          }}
+        />
+      )}
       {choice && (
         <ChoiceDialog
           size={size}

@@ -331,21 +331,48 @@ export const turnRequest = (way: TurnWay, lang: Lang) => stepsRequest([{ do: 'tu
 
 // lumi.py LOOK: +yaw = Lumi's left, +pitch = up; the head rests at its lowest pitch (robot/head.py HEAD_REST_PITCH)
 export const HEAD_REST_PITCH = -5;
-const LOOK_YAW = 40;
-const LOOK_UP_PITCH = 20;
+/** LOOK goes a step from where the head is (owner, 2026-11-23: one tap went all the way): two steps from the bottom
+ *  reach the top (robot/head.py pitch -5 .. 35), three from ahead reach a side (robot/head.py YAW_LIMIT 60). */
+export const LOOK_PITCH = { min: HEAD_REST_PITCH, max: 35, step: 20 } as const;
+export const LOOK_YAW = { max: 60, step: 20 } as const;
+const AT_END_DEG = 0.5; // this close to an end the head is there (the encoders read a little past it)
 
-/** /head/turn always takes a yaw: up and down keep the yaw the head has now. */
-export function lookRequest(dir: LookDir, headYawDeg: number | null): Request {
-  const yaw = headYawDeg ?? 0;
-  const body =
-    dir === 'left'
-      ? { yaw: LOOK_YAW }
-      : dir === 'right'
-        ? { yaw: -LOOK_YAW }
-        : dir === 'centre'
-          ? { yaw: 0, pitch: HEAD_REST_PITCH }
-          : { yaw, pitch: dir === 'up' ? LOOK_UP_PITCH : HEAD_REST_PITCH };
-  return { path: '/head/turn', body, timeoutMs: 20000 };
+export type LookEdge = 'top' | 'bottom' | 'left' | 'right';
+export type LookStep = { req: Request; edge: LookEdge | null } | { reached: LookEdge };
+
+/**
+ * LOOK's step from the head's pose now (null: not known, taken as ahead and at rest): the request, and the end it
+ * stops at when it gets there; or `reached` when the head is at that end already and nothing is sent. Ahead goes
+ * straight to ahead and rest. /head/turn always takes a yaw; up and down keep the yaw the head has.
+ */
+export function lookStep(dir: LookDir, yawDeg: number | null, pitchDeg: number | null): LookStep {
+  const yaw = yawDeg ?? 0;
+  const pitch = pitchDeg ?? HEAD_REST_PITCH;
+  const req = (body: object): Request => ({ path: '/head/turn', body, timeoutMs: 20000 });
+  if (dir === 'centre') return { req: req({ yaw: 0, pitch: HEAD_REST_PITCH }), edge: null };
+  if (dir === 'up' || dir === 'down') {
+    const up = dir === 'up';
+    const end = up ? LOOK_PITCH.max : LOOK_PITCH.min;
+    const edge: LookEdge = up ? 'top' : 'bottom';
+    if (Math.abs(pitch - end) <= AT_END_DEG || (up ? pitch > end : pitch < end)) return { reached: edge };
+    const to = up ? Math.min(end, pitch + LOOK_PITCH.step) : Math.max(end, pitch - LOOK_PITCH.step);
+    return { req: req({ yaw: round1(yaw), pitch: round1(to) }), edge: to === end ? edge : null };
+  }
+  const left = dir === 'left'; // + yaw is Lumi's left
+  const end = left ? LOOK_YAW.max : -LOOK_YAW.max;
+  const edge: LookEdge = left ? 'left' : 'right';
+  if (Math.abs(yaw - end) <= AT_END_DEG || (left ? yaw > end : yaw < end)) return { reached: edge };
+  const to = left ? Math.min(end, yaw + LOOK_YAW.step) : Math.max(end, yaw - LOOK_YAW.step);
+  return { req: req({ yaw: round1(to) }), edge: to === end ? edge : null };
+}
+const round1 = (v: number) => Math.round(v * 10) / 10;
+
+/** The head's yaw and pitch in a /head/turn answer ({body: {head_yaw_deg, head_pitch_deg}}); null when it has none. */
+export function headPoseOf(data: unknown): { yaw: number; pitch: number } | null {
+  const b = (data as { body?: { head_yaw_deg?: unknown; head_pitch_deg?: unknown } } | null)?.body;
+  return b && typeof b.head_yaw_deg === 'number' && typeof b.head_pitch_deg === 'number'
+    ? { yaw: b.head_yaw_deg, pitch: b.head_pitch_deg }
+    : null;
 }
 
 /** The assistant runs and owns the speaker: /say and a spoken /ask are refused then, so it says or answers instead. */

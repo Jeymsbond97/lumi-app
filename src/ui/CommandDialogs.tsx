@@ -6,7 +6,8 @@ import { useEffect, useRef, useState, type ReactNode } from 'react';
 import { ActivityIndicator, BackHandler, Pressable, ScrollView, StyleSheet, Text, TextInput, useWindowDimensions, View } from 'react-native';
 import Animated, { FadeIn, FadeOut } from 'react-native-reanimated';
 import { useI18n, type TextKey } from '../lib/i18n';
-import { reasonKey, send, stepLine, stepText, toParsed, type Parsed } from '../lib/commands';
+import { reasonKey, send, stepLine, stepText, toParsed, type LookDir, type Parsed } from '../lib/commands';
+import Svg, { Path } from 'react-native-svg';
 import { CommandIcon, type CommandIconName } from './CommandIcon';
 import { clamp, fonts, mono } from './theme';
 
@@ -208,6 +209,128 @@ export function ChoiceDialog({
         </View>
       </View>
     </Animated.View>
+  );
+}
+
+// ---------- LOOK: a pad ----------
+/** An arrow's path pointing up in a 24 box; turned for the other ways. */
+const ARROW = 'M12 5 L12 19 M6 11 L12 5 L18 11';
+const TURN_OF: Record<Exclude<LookDir, 'centre'>, number> = { up: 0, right: 90, down: 180, left: 270 };
+
+/** A pad in the screen's middle, in the tiles' look; a tap anywhere outside closes it (no button). */
+function PadCard({ size, title, note, onClose, children }: { size: number; title: string; note: string | null; onClose: () => void; children: ReactNode }) {
+  const { t } = useI18n();
+  useEffect(() => {
+    const sub = BackHandler.addEventListener('hardwareBackPress', () => {
+      onClose();
+      return true;
+    });
+    return () => sub.remove();
+  }, [onClose]);
+  return (
+    <Animated.View style={[StyleSheet.absoluteFill, styles.center]} entering={FadeIn.duration(140)} exiting={FadeOut.duration(120)}>
+      <Pressable style={[StyleSheet.absoluteFill, styles.backdrop]} onPress={onClose} accessibilityLabel={t('cancel')} />
+      <View accessibilityViewIsModal style={[styles.padCard, { padding: size * 1.1, gap: size * 0.9 }]}>
+        <Text style={[styles.padTitle, { fontSize: size * 0.92 }]}>{title}</Text>
+        {children}
+        {/* the room stays, so the pad does not jump when a note comes */}
+        <Text style={[styles.padNote, { fontSize: size * 0.8, minHeight: size * 1.2 }]} accessibilityLiveRegion="polite" numberOfLines={1}>
+          {note ?? ''}
+        </Text>
+      </View>
+    </Animated.View>
+  );
+}
+
+/** One key of a pad: white while its command runs, back to plain when it has ended (owner, 2026-11-23). */
+function PadKey({
+  cell,
+  round,
+  busy,
+  label,
+  onPress,
+  children,
+}: {
+  cell: number;
+  round?: boolean;
+  busy: boolean;
+  label: string;
+  onPress: () => void;
+  children: (fg: string) => ReactNode;
+}) {
+  return (
+    <Pressable
+      onPress={onPress}
+      hitSlop={2}
+      accessibilityRole="button"
+      accessibilityLabel={label}
+      accessibilityState={{ busy }}
+      style={({ pressed }) => [
+        styles.padKey,
+        { width: cell, height: cell, borderRadius: round ? cell / 2 : 16 },
+        round && styles.padCentre,
+        busy && styles.optionOn,
+        pressed && !busy && styles.padPressed,
+      ]}
+    >
+      {children(busy ? ON_TEXT : mono.text)}
+    </Pressable>
+  );
+}
+
+const padCell = (h: number) => clamp(52, 0.11 * h, 84);
+
+/**
+ * LOOK (owner, 2026-11-23): four arrows round AHEAD, as on a remote. A tap turns the head a step that way at once
+ * (no GO); the key stays white until the head has stopped. At an end the pad says so (Reached the top, ...).
+ */
+export function LookPad({ size, onLook, onClose }: { size: number; onLook: (dir: LookDir) => Promise<string | null>; onClose: () => void }) {
+  const { t } = useI18n();
+  const { height: h } = useWindowDimensions();
+  const [busy, setBusy] = useState<LookDir | null>(null);
+  const [note, setNote] = useState<string | null>(null);
+  const cell = padCell(h);
+  const gap = size * 0.5;
+  const tap = (dir: LookDir) => {
+    if (busy) return;
+    setBusy(dir);
+    setNote(null);
+    onLook(dir)
+      .then(setNote)
+      .finally(() => setBusy(null));
+  };
+  const arrow = (dir: Exclude<LookDir, 'centre'>, label: TextKey) => (
+    <PadKey cell={cell} busy={busy === dir} label={t(label)} onPress={() => tap(dir)}>
+      {(fg) => (
+        <Svg width={cell * 0.4} height={cell * 0.4} viewBox="0 0 24 24" style={{ transform: [{ rotate: `${TURN_OF[dir]}deg` }] }}>
+          <Path d={ARROW} stroke={fg} strokeWidth={2.2} fill="none" strokeLinecap="round" strokeLinejoin="round" />
+        </Svg>
+      )}
+    </PadKey>
+  );
+  const blank = <View style={{ width: cell, height: cell }} />;
+  return (
+    <PadCard size={size} title={t('cmdLook')} note={note} onClose={onClose}>
+      <View style={{ gap }}>
+        <View style={[styles.padRow, { gap }]}>
+          {blank}
+          {arrow('up', 'cmdLookUp')}
+          {blank}
+        </View>
+        <View style={[styles.padRow, { gap }]}>
+          {arrow('left', 'cmdLookLeft')}
+          <PadKey cell={cell} round busy={busy === 'centre'} label={t('cmdLookAhead')} onPress={() => tap('centre')}>
+            {(fg) => <Text style={[styles.padWord, { fontSize: size * 0.72, color: fg }]}>{t('cmdLookAhead')}</Text>}
+          </PadKey>
+          {arrow('right', 'cmdLookRight')}
+        </View>
+        <View style={[styles.padRow, { gap }]}>
+          {blank}
+          {arrow('down', 'cmdLookDown')}
+          {blank}
+        </View>
+      </View>
+    </PadCard>
   );
 }
 
@@ -432,6 +555,21 @@ const styles = StyleSheet.create({
   optionTextOn: { fontFamily: fonts.monoBold, color: ON_TEXT },
   footer: { flexDirection: 'row', justifyContent: 'flex-end' },
   footerButton: { flexBasis: 0, flexGrow: 1, maxWidth: 220 },
+  // the Commands tiles' look (commands.tsx tile): the same border, radius and glass
+  padCard: { alignItems: 'center', borderRadius: 16, borderWidth: 1, borderColor: '#2e2e2e', backgroundColor: 'rgba(12,12,14,0.98)' },
+  padTitle: { alignSelf: 'flex-start', fontFamily: fonts.monoBold, color: mono.text, letterSpacing: 1, textTransform: 'uppercase' },
+  padRow: { flexDirection: 'row', justifyContent: 'center' },
+  padKey: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 1,
+    borderColor: '#2e2e2e',
+    backgroundColor: 'rgba(255,255,255,0.04)',
+  },
+  padCentre: { borderColor: '#555' },
+  padWord: { fontFamily: fonts.monoBold, letterSpacing: 1, textTransform: 'uppercase' },
+  padNote: { fontFamily: fonts.mono, color: mono.yellow, textAlign: 'center' },
+  padPressed: { backgroundColor: 'rgba(255,255,255,0.14)' },
   card: {
     position: 'absolute',
     justifyContent: 'flex-start',
