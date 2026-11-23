@@ -10,13 +10,13 @@ are plain functions in `src/lib/commands.ts`, tested in `src/lib/__tests__/comma
 - The content sits in the free middle of the screen: right of the modes (Greeter, Patrol, Wave, Welcome stay on the
   left: most commands need one of them), left of the readings, or of the task card while a task runs, under the power
   chips and above the Dock. STOP (bottom left), the Dock, the battery and the task card stay on top, as on every screen.
-- **Groups** on top: ARM & OBJECTS, TALKING, MISSIONS, ARM SETUP. One group's tiles show at a time, so a
+- **Groups** on top: ARM & OBJECTS, MISSIONS, ARM SETUP. One group's tiles show at a time, so a
   phone (landscape, about 844 × 390) fits them; the tile grid scrolls. ARM SETUP shows the arm settings panel instead
-  of tiles (below). ARM & OBJECTS holds the main commands, most used first, with all of the old MOVING group
-  (owner, 2026-11-23).
+  of tiles (below). ARM & OBJECTS holds the main commands, most used first, with all of the old MOVING and
+  TALKING groups (owner, 2026-11-23).
 - **The status line** under the groups: how the last tap in that group went (sending, Lumi is on it, the assistant
-  does it, done, refused and the robot's reason, Lumi did not answer); each group keeps its own, so Volume in Talking
-  never shows on Arm & objects. For "Move object" it follows `/skills/state` (working, done, refused with its reason).
+  does it, done, refused and the robot's reason, Lumi did not answer); each group keeps its own, so ARM SETUP's taps
+  never show on Arm & objects. For "Move object" it follows `/skills/state` (working, done, refused with its reason).
   "Done" stays 4 s (`DONE_SHOWN_MS`), then the line goes back to the running task's step, as with no tap yet. An `/ask`
   answer is shown under it and stays.
 - **A tile that can't run now** is dimmed; tapping it says why instead of sending (switch on Greeter or Patrol,
@@ -51,14 +51,14 @@ are plain functions in `src/lib/commands.ts`, tested in `src/lib/__tests__/comma
 | | Carry it | marker, then: keep holding, put on a table, hand it over | `POST /tasks/carry` `{dest: {marker}, then, on: null}` | Patrol, arm, holding |
 | | Go to | marker | `POST /agv/go` `{marker}` | |
 | | Go charge | | `POST /agv/go` `{marker: "home"}` | |
+| | Say | text | `POST /say` `{text}`; while the assistant runs (it owns the speaker and `/say` is refused) a mission `[{do: say, text}]` | |
+| | Ask | text | `POST /ask` `{question, speak: true}` (the answer is shown too); while the assistant runs `POST /tasks/command` with the question | |
 | | Move object (pick it up, put it down at a free spot nearby) | object | `POST /skills/move` `{object, colour}`, watched on `GET /skills/state` | arm, empty hand |
 | | Wave | | `POST /arm/wave` (answers when done; follows the global arm speed). With Greeter or Patrol on Lumi says a hello as the hand comes up (Thor `tasks/wave_lines.py` ASKED, English or Korean at random); both off: a silent wave | arm |
+| | Sing | any song, or a title | today `POST /tasks/command` `{text: "sing a song"}` or `"sing <title>"`; with the proposed `/sing` `POST /sing` `{id}` | Greeter or Patrol (not with `/sing`) |
 | | Look | left, right, up, down, ahead | `POST /head/turn` `{yaw, pitch}` (+yaw = left 40°, up = pitch 20°, down and ahead = pitch −5°, the rest) | |
 | | Turn | left 90°, right 90°, around | `POST /tasks/steps` `[{do: turn, deg}]` (+ = left) | Patrol |
 | | Drive | forward / back / left / right, 0.5, 1 or 2 m | `POST /tasks/steps` `[{do: move, dir, m}]` | Patrol |
-| Talking | Say | text | `POST /say` `{text}`; while the assistant runs (it owns the speaker and `/say` is refused) a mission `[{do: say, text}]` | |
-| | Ask | text | `POST /ask` `{question, speak: true}` (the answer is shown too); while the assistant runs `POST /tasks/command` with the question | |
-| | Sing | any song, or a title | today `POST /tasks/command` `{text: "sing a song"}` or `"sing <title>"`; with the proposed `/sing` `POST /sing` `{id}` | Greeter or Patrol (not with `/sing`) |
 | | Volume | − / + in steps of 10 % | `GET /volume`, `POST /volume` `{percent}` | |
 | Missions | Type a command | free text, or an example | `POST /tasks/parse` `{text, llm: false}` 0.6 s after typing stops, `llm: true` on Enter (nothing moves); START sends what it read: `steps` → `/tasks/steps`, `fetch` → `/tasks/fetch`, `carry` → `/tasks/carry`, `give` → `/tasks/give`, `place` → `/tasks/place`, `command` → `/tasks/command` (exactly as the dashboard's Command dialog) | what the robot says in `problems` |
 | | Pause / Resume / Release / Stop | | `POST /tasks/pause`, `/tasks/resume`, `/tasks/release`, `/tasks/stop` | a task that offers it (`taskButtons`) |

@@ -84,10 +84,9 @@ const SEEN_WAIT_MS = 3000; // the torso camera's objects when a choice of object
 const SEEN_POLL_MS = 1000; // Pick up and Move aside: the things seen, read again this often while the list is open
 const DONE_SHOWN_MS = 4000; // a finished tap's "Done" stays this long, then the line shows the task again
 
-type Group = 'arm' | 'talk' | 'mission' | 'armSetup';
+type Group = 'arm' | 'mission' | 'armSetup';
 const GROUPS: { key: Group; label: TextKey }[] = [
   { key: 'arm', label: 'cmdGroupArm' },
-  { key: 'talk', label: 'cmdGroupTalk' },
   { key: 'mission', label: 'cmdGroupMission' },
   { key: 'armSetup', label: 'cmdGroupArmSetup' },
 ];
@@ -128,6 +127,8 @@ interface Tile {
   onPress: () => void;
   wide?: boolean;
   red?: boolean;
+  /** The Volume tile: a stepper inside, no tap of its own. */
+  volume?: boolean;
 }
 
 const TASK_TILES: { cmd: TaskCommand; icon: CommandIconName; label: TextKey }[] = [
@@ -515,7 +516,7 @@ export default function CommandsScreen() {
   const buttons = task ? taskButtons(task) : [];
 
   const TILES: Record<Exclude<Group, 'armSetup'>, Tile[]> = {
-    // the main commands, most used first (owner, 2026-11-23): with all of MOVING (that group is gone)
+    // the main commands, most used first (owner, 2026-11-23): with all of MOVING and TALKING (those groups are gone)
     arm: [
       {
         icon: 'come',
@@ -571,6 +572,8 @@ export default function CommandsScreen() {
         hint: 'cmdDockHint',
         onPress: () => go({ label: 'cmdDock', req: goRequest(DOCK_MARKER), ask: t('cmdAskDock') }),
       },
+      { icon: 'say', label: 'cmdSay', hint: 'cmdSayHint', onPress: () => setText('say') },
+      { icon: 'ask', label: 'cmdAsk', hint: 'cmdAskHint', onPress: () => setText('ask') },
       { icon: 'aside', label: 'cmdAside', hint: 'cmdAsideHint', needs: ['arm', 'empty'], onPress: () => openSeen('aside') },
       {
         icon: 'wave',
@@ -579,15 +582,13 @@ export default function CommandsScreen() {
         needs: ['arm'],
         onPress: () => go({ label: 'cmdWave', req: waveRequest, ask: t('cmdAskWave'), waits: true }),
       },
+      // without the proposed /sing only the assistant sings (Greeter or Patrol on)
+      { icon: 'sing', label: 'cmdSing', hint: 'cmdSingHint', needs: songs === null ? ['modes'] : [], onPress: () => open('sing', { song: 'any' }) },
       { icon: 'look', label: 'cmdLook', hint: 'cmdLookHint', onPress: () => open('look', { dir: 'centre' }) },
       { icon: 'turn', label: 'cmdTurn', hint: 'cmdTurnHint', needs: ['patrol'], onPress: () => open('turn', { way: 'left' }) },
       { icon: 'drive', label: 'cmdDrive', hint: 'cmdDriveHint', needs: ['patrol'], onPress: () => open('drive', { dir: 'forward', m: '0.5' }) },
-    ],
-    talk: [
-      { icon: 'say', label: 'cmdSay', hint: 'cmdSayHint', onPress: () => setText('say') },
-      { icon: 'ask', label: 'cmdAsk', hint: 'cmdAskHint', onPress: () => setText('ask') },
-      // without the proposed /sing only the assistant sings (Greeter or Patrol on)
-      { icon: 'sing', label: 'cmdSing', hint: 'cmdSingHint', needs: songs === null ? ['modes'] : [], onPress: () => open('sing', { song: 'any' }) },
+      // Volume: a − / + stepper in the tile, not a tap
+      { icon: 'volume', label: 'cmdVolume', volume: true, onPress: () => {} },
     ],
     mission: [
       { icon: 'type', label: 'cmdType', hint: 'cmdTypeHint', wide: true, onPress: () => setBox('') },
@@ -705,6 +706,20 @@ export default function CommandsScreen() {
         ) : (
           <ScrollView style={styles.tilesScroll} contentContainerStyle={[styles.tiles, { gap }]} showsVerticalScrollIndicator={false}>
             {TILES[group].map((tile) => {
+              if (tile.volume)
+                return (
+                  <View key={tile.label} style={[styles.tile, { width: tileW, minHeight: size * 5.6, padding: size * 0.8, gap: size * 0.35 }]}>
+                    <CommandIcon name="volume" size={size * 1.7} color={mono.text} />
+                    <Text style={[styles.tileLabel, { fontSize: size * 0.92 }]}>{t('cmdVolume')}</Text>
+                    <View style={[styles.stepper, { gap: size * 0.4 }]}>
+                      <StepButton plus={false} size={size} onPress={() => changeVolume(-VOLUME_STEP)} disabled={volume === null} label={t('cmdVolumeDown')} />
+                      <Text style={[styles.volume, { fontSize: size * 0.9, minWidth: size * 3.2 }]}>
+                        {volume === null ? '' : fill(t('cmdPercent'), { p: volume })}
+                      </Text>
+                      <StepButton plus size={size} onPress={() => changeVolume(VOLUME_STEP)} disabled={volume === null} label={t('cmdVolumeUp')} />
+                    </View>
+                  </View>
+                );
               const why = tile.off ?? blocked(tile.needs ?? [], ready);
               return (
                 <Pressable
@@ -738,19 +753,6 @@ export default function CommandsScreen() {
                 </Pressable>
               );
             })}
-            {group === 'talk' && (
-              <View style={[styles.tile, { width: tileW, minHeight: size * 5.6, padding: size * 0.8, gap: size * 0.35 }]}>
-                <CommandIcon name="volume" size={size * 1.7} color={mono.text} />
-                <Text style={[styles.tileLabel, { fontSize: size * 0.92 }]}>{t('cmdVolume')}</Text>
-                <View style={[styles.stepper, { gap: size * 0.4 }]}>
-                  <StepButton plus={false} size={size} onPress={() => changeVolume(-VOLUME_STEP)} disabled={volume === null} label={t('cmdVolumeDown')} />
-                  <Text style={[styles.volume, { fontSize: size * 0.9, minWidth: size * 3.2 }]}>
-                    {volume === null ? '' : fill(t('cmdPercent'), { p: volume })}
-                  </Text>
-                  <StepButton plus size={size} onPress={() => changeVolume(VOLUME_STEP)} disabled={volume === null} label={t('cmdVolumeUp')} />
-                </View>
-              </View>
-            )}
           </ScrollView>
         )}
       </View>
