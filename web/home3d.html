@@ -552,7 +552,6 @@ const GLIDE_STRETCH = 1.2;                      // a glide lasts a bit longer th
 const BODY_KEYS = ['head', 'neck', 'waist', 'lift'];
 const glide = {
   body: { from: null, to: null, sent: null, t0: 0, ms: 0, last: 0 },
-  arm: { from: null, to: null, sent: null, t0: 0, ms: 0, last: 0 },
 };
 let shown = null;                               // the pose drawn now: {head, neck, waist, lift, arm: [6]}
 let drawnAt = 0;                                // when `shown` was drawn: a new glide starts from there, so the next
@@ -566,20 +565,55 @@ function aim(g, from, to) {
   g.from = from; g.to = to; g.t0 = drawnAt && now - drawnAt < 100 ? drawnAt : now;
   g.ms = since > GLIDE_MAX_MS ? 0 : Math.max(GLIDE_MIN_MS, since * GLIDE_STRETCH);
 }
+// The arm is played back a little late from its readings, not aimed at the newest one (owner, 2026-11-23: on the
+// tablet it moved in jerks). Its readings come about every 200 ms but now and then over a second late (the arm
+// controller drops a connection and the robot asks again); drawn ARM_DELAY_MS behind, the arm is nearly always between
+// two readings it already has, so it moves on evenly and never jumps; a late reading only slows that stretch down.
+const ARM_DELAY_MS = 450;
+const ARM_STEP_MS = 200;                        // the usual time between two readings (lib/useLiveJoints LIVE_JOINTS_MS)
+const ARM_KEEP = 40;                            // readings kept (8 s): far more than the delay needs
+const armTrack = [];                            // {t: arrival ms, v: [6 joints]}, oldest first
+function armSample(v) {
+  const now = performance.now(), last = armTrack[armTrack.length - 1];
+  if (last && v.every((x, i) => x === last.v[i])) return;     // the same joints again: no new reading
+  // after a pause (the arm stood still, so no new joints came) the move starts from where it stood, one step back,
+  // instead of gliding over the whole pause
+  if (last && now - last.t > GLIDE_MAX_MS) armTrack.push({ t: now - ARM_STEP_MS, v: last.v });
+  armTrack.push({ t: now, v });
+  while (armTrack.length > ARM_KEEP) armTrack.shift();
+}
+function armAt(now) {
+  if (!armTrack.length) return null;
+  const at = now - ARM_DELAY_MS;
+  if (armTrack.length === 1 || at <= armTrack[0].t) return armTrack[0].v;
+  for (let i = armTrack.length - 1; i > 0; i--) {
+    const a = armTrack[i - 1], b = armTrack[i];
+    if (at >= a.t) {
+      const k = at >= b.t ? 1 : (at - a.t) / (b.t - a.t);
+      return a.v.map((x, j) => x + (b.v[j] - x) * k);
+    }
+  }
+  return armTrack[armTrack.length - 1].v;
+}
 function poseTo() {                             // the state's pose is the new target of both groups
   if (!shown) shown = { ...Object.fromEntries(BODY_KEYS.map(k => [k, state[k]])), arm: state.arm.slice() };
   aim(glide.body, bodyOf(shown), bodyOf(state));
-  aim(glide.arm, shown.arm.slice(), state.arm.slice());
+  armSample(state.arm.slice());
 }
 function glideStep(now) {
   if (!shown) return;
   drawnAt = now;
   let moved = false;
-  for (const [g, put] of [[glide.body, v => BODY_KEYS.forEach((k, i) => (shown[k] = v[i]))], [glide.arm, v => (shown.arm = v)]]) {
+  for (const [g, put] of [[glide.body, v => BODY_KEYS.forEach((k, i) => (shown[k] = v[i]))]]) {
     if (!g.to) continue;
     const k = g.ms ? Math.min(1, (now - g.t0) / g.ms) : 1;
     put(g.from.map((a, i) => a + (g.to[i] - a) * k));
     if (k >= 1) g.to = null;                    // arrived: rest until the next pose
+    moved = true;
+  }
+  const arm = armAt(now);
+  if (arm && arm.some((v, i) => v !== shown.arm[i])) {
+    shown.arm = arm;
     moved = true;
   }
   if (!moved) return;
