@@ -83,6 +83,7 @@ const POLL_MS = 1500; // the hand and the last skill, while this screen is open
 const DOCK_SPACE = 64; // room the sections dock takes at the bottom, above the safe area
 const SEEN_WAIT_MS = 3000; // the torso camera's objects when a choice of objects opens
 const SEEN_POLL_MS = 1000; // Pick up and Move aside: the things seen, read again this often while the list is open
+const MARKERS_POLL_MS = 3000; // a choice of markers: the map's markers, read again this often while it is open
 const DONE_SHOWN_MS = 4000; // a finished tap's "Done" stays this long, then the line shows the task again
 
 type Group = 'arm' | 'mission' | 'armSetup';
@@ -248,6 +249,20 @@ export default function CommandsScreen() {
     };
   }, [focused, url]);
 
+  // the map's markers again while a choice of markers is open: a marker just added, or a new map, shows at once
+  const markersOpen = choice === 'goto' || choice === 'fetch' || choice === 'carry';
+  useEffect(() => {
+    if (!markersOpen) return;
+    let on = true;
+    const tick = () => read(url, '/agv/markers').then((r) => on && r !== null && setMarkers(toMarkers(r)));
+    tick();
+    const id = setInterval(tick, MARKERS_POLL_MS);
+    return () => {
+      on = false;
+      clearInterval(id);
+    };
+  }, [markersOpen, url]);
+
   // Pick up and Move aside offer only what the torso camera sees near, read again while the list is open
   const seenOpen = text === 'pick' || choice === 'aside';
   const reach = modes?.patrol ? REACH_MM.drive : REACH_MM.arm;
@@ -370,7 +385,16 @@ export default function CommandsScreen() {
     key,
     title,
     empty: 'cmdNoMarkers',
-    options: [...(here ? [{ id: 'here', label: t('cmdHere') }] : []), ...markers.map((m) => ({ id: m, label: m }))],
+    grid: true,
+    // Here and the charger each a row of their own on top; the map's markers under them in name order (p2 before p10)
+    options: [
+      ...(here ? [{ id: 'here', label: t('cmdHere'), icon: 'come' as const, featured: true }] : []),
+      ...(markers.includes(DOCK_MARKER) ? [{ id: DOCK_MARKER, label: t('cmdChargerMarker'), icon: 'dock' as const, featured: true }] : []),
+      ...markers
+        .filter((m) => m !== DOCK_MARKER)
+        .sort((x, y) => x.localeCompare(y, undefined, { numeric: true, sensitivity: 'base' }))
+        .map((m) => ({ id: m, label: m })),
+    ],
   });
 
   const fields = (kind: ChoiceKind): ChoiceField[] => {
@@ -770,7 +794,6 @@ export default function CommandsScreen() {
       <Joystick />
       {choice && (
         <ChoiceDialog
-          box={area}
           size={size}
           title={t(CHOICE_TITLE[choice])}
           fields={fields(choice)}

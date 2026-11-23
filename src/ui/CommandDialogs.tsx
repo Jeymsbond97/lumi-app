@@ -1,12 +1,14 @@
 // The Commands screen's dialogs, in the dark look of ConfirmDialog: a choice (which object, which marker), a text to
-// say or ask, and the typed command box (MISSIONS shows it in place, not as a dialog). The dialogs sit in the screen's free middle (between the modes, the task card and
-// the Dock) at its top, so a phone's keyboard does not cover it; STOP stays on top of all of them.
+// say or ask, and the typed command box (MISSIONS shows it in place, not as a dialog). A choice opens as a card in the
+// screen's middle with its options as tiles (owner, 2026-11-23); a text sits in the free middle at its top, so a
+// phone's keyboard does not cover it. Every footer has two buttons of one size. STOP stays on top of all of them.
 import { useEffect, useRef, useState, type ReactNode } from 'react';
-import { ActivityIndicator, BackHandler, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
+import { ActivityIndicator, BackHandler, Pressable, ScrollView, StyleSheet, Text, TextInput, useWindowDimensions, View } from 'react-native';
 import Animated, { FadeIn, FadeOut } from 'react-native-reanimated';
 import { useI18n, type TextKey } from '../lib/i18n';
 import { reasonKey, send, stepLine, stepText, toParsed, type Parsed } from '../lib/commands';
-import { fonts, mono } from './theme';
+import { CommandIcon, type CommandIconName } from './CommandIcon';
+import { clamp, fonts, mono } from './theme';
 
 /** The screen's free area (distances from the screen's edges). */
 export interface Box {
@@ -64,8 +66,7 @@ function Button({
       hitSlop={4}
       style={({ pressed }) => [
         styles.button,
-        { height: size * 2.6, paddingHorizontal: size * 1.2, borderColor: muted ? mono.dim : mono.text },
-        primary && { paddingHorizontal: size * 1.8 },
+        { height: size * 2.6, minWidth: size * 8.5, paddingHorizontal: size * 1.2, borderColor: muted ? mono.dim : mono.text },
         primary && !disabled && styles.primary,
         disabled && (primary ? styles.primaryOff : styles.disabled),
         pressed && styles.pressed,
@@ -86,6 +87,10 @@ export interface ChoiceOption {
   label: string;
   /** A small mark after the label ("seen now"). */
   note?: string;
+  /** Drawn on the option's tile (the charger's bolt, Here). */
+  icon?: CommandIconName;
+  /** A row of its own across the card, above the others (the charger, Here). */
+  featured?: boolean;
 }
 export interface ChoiceField {
   key: string;
@@ -93,10 +98,11 @@ export interface ChoiceField {
   options: ChoiceOption[];
   /** Shown when there is nothing to choose from. */
   empty?: TextKey;
+  /** Many short names (a map's markers): small tiles in more columns, the name in the middle. */
+  grid?: boolean;
 }
 
 export function ChoiceDialog({
-  box,
   size,
   title,
   fields,
@@ -106,7 +112,6 @@ export function ChoiceDialog({
   onClose,
   onPick,
 }: {
-  box: Box;
   size: number;
   title: string;
   fields: ChoiceField[];
@@ -118,47 +123,91 @@ export function ChoiceDialog({
   onPick?: (key: string, id: string) => void;
 }) {
   const { t } = useI18n();
+  const { width: w, height: h } = useWindowDimensions();
+  useEffect(() => {
+    const sub = BackHandler.addEventListener('hardwareBackPress', () => {
+      onClose();
+      return true;
+    });
+    return () => sub.remove();
+  }, [onClose]);
   const ready = fields.every((f) => f.options.some((o) => o.id === values[f.key]));
+
+  // a card in the middle of the screen, its options as tiles in even columns
+  const cardW = Math.min(w - 32, clamp(320, 0.6 * w, size * 44));
+  const pad = size * 1.3;
+  const gap = size * 0.6;
+  const inner = cardW - 2 * pad;
+  const colsFor = (min: number, lo: number, hi: number) => clamp(lo, Math.floor((inner + gap) / (min + gap)), hi);
+  const widthFor = (cols: number) => Math.floor((inner - gap * (cols - 1)) / cols);
+  const tileW = widthFor(colsFor(size * 9.5, 2, 4));
+  const gridW = widthFor(colsFor(size * 6.2, 3, 7));
+
+  const option = (f: ChoiceField, o: ChoiceOption, width: number, small: boolean) => {
+    const on = !onPick && values[f.key] === o.id;
+    return (
+      <Pressable
+        key={o.id}
+        onPress={() => (onPick ? onPick(f.key, o.id) : onChange(f.key, o.id))}
+        hitSlop={2}
+        accessibilityRole="radio"
+        accessibilityState={{ selected: on }}
+        style={({ pressed }) => [
+          styles.option,
+          small
+            ? [styles.optionSmall, { width, height: size * 2.9, paddingHorizontal: size * 0.4 }]
+            : { width, minHeight: size * 3.2, paddingHorizontal: size * 0.9, paddingVertical: size * 0.6, gap: size * 0.6 },
+          on && styles.optionOn,
+          pressed && styles.pressed,
+        ]}
+      >
+        {o.icon && <CommandIcon name={o.icon} size={size * 1.2} color={on ? ON_TEXT : mono.soft} />}
+        <View style={small ? styles.optionWordsSmall : styles.optionWords}>
+          <Text
+            style={[small ? styles.optionTextSmall : styles.optionText, { fontSize: size * 0.92 }, on && styles.optionTextOn]}
+            numberOfLines={small ? 1 : 2}
+          >
+            {o.label}
+          </Text>
+          {o.note && <Text style={[styles.note, { fontSize: size * 0.7 }, on && styles.optionTextOn]}>{o.note}</Text>}
+        </View>
+      </Pressable>
+    );
+  };
+
   return (
-    <Sheet box={box} size={size} onClose={onClose}>
-      <Text style={[styles.title, { fontSize: size * 1.05 }]}>{title}</Text>
-      <ScrollView style={styles.scroll} contentContainerStyle={{ gap: size * 0.9 }} keyboardShouldPersistTaps="handled">
-        {fields.map((f) => (
-          <View key={f.key} style={{ gap: size * 0.45 }}>
-            {!onPick && <Text style={[styles.label, { fontSize: size * 0.78 }]}>{t(f.title)}</Text>}
-            {f.options.length === 0 && f.empty && <Text style={[styles.soft, { fontSize: size * 0.85 }]}>{t(f.empty)}</Text>}
-            <View style={[styles.chips, { gap: size * 0.45 }]}>
-              {f.options.map((o) => {
-                const on = !onPick && values[f.key] === o.id;
-                return (
-                  <Pressable
-                    key={o.id}
-                    onPress={() => (onPick ? onPick(f.key, o.id) : onChange(f.key, o.id))}
-                    hitSlop={3}
-                    accessibilityRole="radio"
-                    accessibilityState={{ selected: on }}
-                    style={({ pressed }) => [
-                      styles.chip,
-                      { paddingHorizontal: size * 0.85, paddingVertical: size * 0.45, gap: size * 0.4 },
-                      on && styles.chipOn,
-                      pressed && styles.pressed,
-                    ]}
-                  >
-                    {on && <View style={[styles.dot, { width: size * 0.45, height: size * 0.45 }]} />}
-                    <Text style={[styles.chipText, { fontSize: size * 0.9 }, on && styles.chipTextOn]}>{o.label}</Text>
-                    {o.note && <Text style={[styles.note, { fontSize: size * 0.7 }]}>{o.note}</Text>}
-                  </Pressable>
-                );
-              })}
-            </View>
+    <Animated.View style={[StyleSheet.absoluteFill, styles.center]} entering={FadeIn.duration(140)} exiting={FadeOut.duration(120)}>
+      <Pressable style={[StyleSheet.absoluteFill, styles.backdropDeep]} onPress={onClose} accessibilityLabel={t('cancel')} />
+      <View accessibilityViewIsModal style={[styles.modal, { width: cardW, maxHeight: h * 0.84, padding: pad, gap: size * 1.1 }]}>
+        <Text style={[styles.title, { fontSize: size * 1.15 }]}>{title}</Text>
+        <ScrollView style={styles.scroll} contentContainerStyle={{ gap: size * 1.2 }} keyboardShouldPersistTaps="handled">
+          {fields.map((f) => {
+            const top = f.options.filter((o) => o.featured);
+            const rest = f.options.filter((o) => !o.featured);
+            return (
+              <View key={f.key} style={{ gap: size * 0.6 }}>
+                {!onPick && <Text style={[styles.label, { fontSize: size * 0.78 }]}>{t(f.title)}</Text>}
+                {f.options.length === 0 && f.empty && <Text style={[styles.soft, { fontSize: size * 0.85 }]}>{t(f.empty)}</Text>}
+                {top.length > 0 && <View style={[styles.chips, { gap }]}>{top.map((o) => option(f, o, top.length > 1 ? widthFor(2) : inner, false))}</View>}
+                {rest.length > 0 && (
+                  <View style={[styles.chips, { gap }]}>{rest.map((o) => option(f, o, f.grid ? gridW : tileW, !!f.grid))}</View>
+                )}
+              </View>
+            );
+          })}
+        </ScrollView>
+        <View style={[styles.footer, { gap: size * 0.7 }]}>
+          <View style={styles.footerButton}>
+            <Button text={t('cancel')} size={size} onPress={onClose} muted />
           </View>
-        ))}
-      </ScrollView>
-      <Buttons size={size}>
-        <Button text={t('cancel')} size={size} onPress={onClose} muted />
-        {!onPick && <Button text={t('cmdGo')} size={size} onPress={onDone} disabled={!ready} />}
-      </Buttons>
-    </Sheet>
+          {!onPick && (
+            <View style={styles.footerButton}>
+              <Button text={t('cmdGo')} size={size} onPress={onDone} disabled={!ready} primary />
+            </View>
+          )}
+        </View>
+      </View>
+    </Animated.View>
   );
 }
 
@@ -358,8 +407,31 @@ export function CommandBox({
   );
 }
 
+/** Text on a chosen (white) option. */
+const ON_TEXT = '#0a0a0a';
+
 const styles = StyleSheet.create({
   backdrop: { backgroundColor: 'rgba(0,0,0,0.6)' },
+  backdropDeep: { backgroundColor: 'rgba(0,0,0,0.72)' },
+  center: { alignItems: 'center', justifyContent: 'center' },
+  modal: { borderRadius: 22, borderWidth: 1, borderColor: '#3a3a3a', backgroundColor: 'rgba(12,12,14,0.98)' },
+  option: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: '#333',
+    backgroundColor: 'rgba(255,255,255,0.03)',
+  },
+  optionSmall: { justifyContent: 'center', borderRadius: 12 },
+  optionOn: { borderColor: mono.text, backgroundColor: mono.text },
+  optionWords: { flex: 1, gap: 2 },
+  optionWordsSmall: { alignItems: 'center' },
+  optionText: { fontFamily: fonts.mono, color: mono.text },
+  optionTextSmall: { fontFamily: fonts.mono, color: mono.text, textAlign: 'center' },
+  optionTextOn: { fontFamily: fonts.monoBold, color: ON_TEXT },
+  footer: { flexDirection: 'row', justifyContent: 'flex-end' },
+  footerButton: { flexBasis: 0, flexGrow: 1, maxWidth: 220 },
   card: {
     position: 'absolute',
     justifyContent: 'flex-start',

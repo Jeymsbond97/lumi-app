@@ -16,6 +16,10 @@ are plain functions in `src/lib/commands.ts`, tested in `src/lib/__tests__/comma
   then the rest), with all of the old MOVING and TALKING groups (owner, 2026-11-23).
 - **The joystick** (`ui/Joystick.tsx`, as on Home) sits bottom right; the tiles keep its width free on the right
   (owner, 2026-11-23).
+- **Choices** (Go to, Fetch, Carry, Turn, Look, Sing, ...) open as a card in the middle of the screen with the options
+  as tiles; Cancel and Go are the same size. A choice of markers reads `GET /agv/markers` again every 3 s while it is
+  open, so a marker just added, or the markers of a new map, show at once; the charger (`home`) comes first as
+  Charger.
 - **The status line** under the groups: how the last tap in that group went (sending, Lumi is on it, the assistant
   does it, done, refused and the robot's reason, Lumi did not answer); each group keeps its own, so ARM SETUP's taps
   never show on Arm & objects. For "Move object" it follows `/skills/state` (working, done, refused with its reason).
