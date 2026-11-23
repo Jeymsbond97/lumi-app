@@ -631,7 +631,9 @@ export default function CommandsScreen() {
   const switchW = clamp(36, 0.06 * h, 46);
   const left = 26 + inset.left + 16 + 10 + modesText * 1.6 + modesText * 6.4 + switchW + 16;
   // the joystick bottom right (owner, 2026-11-23) keeps the tiles clear of it, as the readings or the task card do
-  const right = 24 + inset.right + Math.max(task ? clamp(220, 0.42 * h, 340) + 12 : clamp(11, 0.019 * h, 15) * 7 + 12, joystickSize(h) + 16);
+  // the task card's room is kept free whether a task runs or not, so the tiles do not jump when one starts or ends
+  // (owner, 2026-11-23, seen on TALK)
+  const right = 24 + inset.right + Math.max(clamp(220, 0.42 * h, 340) + 12, joystickSize(h) + 16);
   const top = 14 + inset.top + Math.max(44, 0.075 * h);
   const bottom = 18 + inset.bottom + DOCK_SPACE;
   const area: Box = { left, right, top, bottom };

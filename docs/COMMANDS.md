@@ -15,7 +15,9 @@ are plain functions in `src/lib/commands.ts`, tested in `src/lib/__tests__/comma
   of tiles (below). ARM & OBJECTS holds the main commands, most used first (Go charge, Wave, Sing, Follow me, Go to;
   Look and Turn first in the next row, then the rest), with all of the old MOVING and TALKING groups (owner, 2026-11-23).
 - **The joystick** (`ui/Joystick.tsx`, as on Home) sits bottom right; the tiles keep its width free on the right
-  (owner, 2026-11-23).
+  (owner, 2026-11-23). The task card's room on the right is kept free whether a task runs or not, so the tiles do not
+  move when a card comes and goes; tile widths are whole pixels with one to spare (a fraction wrapped the fifth tile
+  on the tablet).
 - **Volume** is not a tile: a speaker button on the left edge where Home has WAVE (`ui/VolumeButton.tsx`). A tap
   opens a small upright fader beside it, rising from the button so it stays clear of the modes: drag, or + / −;
   `GET /volume` when it opens, `POST /volume {percent}` when the finger lifts.
