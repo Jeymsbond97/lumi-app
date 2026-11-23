@@ -67,7 +67,8 @@ are plain functions in `src/lib/commands.ts`, tested in `src/lib/__tests__/comma
 Greeter or Patrol on, anything that drives or turns the base or the waist needs Patrol. Hand controls (wave, poses,
 gripper, head, skills) are refused while something runs (`Busy with a task. Pause or stop it first.`).
 
-The typed command box shows the robot's reading in English (`sentence`, the robot has no Korean one), a mission's
+The typed command box stands open at the top of MISSIONS, not as a dialog, with Pause, Resume, Release and Stop
+under it (owner, 2026-11-23); CLEAR empties the line, START sends and empties it. It shows the robot's reading in English (`sentence`, the robot has no Korean one), a mission's
 steps one per line in the app's language (`stepLine`), and the robot's problems; START is enabled only when there is
 an action and no problem. Moves are asked first; answers, songs and "stop" are not (`parsedMoves`).
 

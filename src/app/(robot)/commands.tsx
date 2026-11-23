@@ -206,7 +206,6 @@ export default function CommandsScreen() {
   const [values, setValues] = useState<Record<string, string>>({});
   const [confirm, setConfirm] = useState<ConfirmRequest | null>(null);
   const [text, setText] = useState<'say' | 'ask' | 'pick' | null>(null);
-  const [box, setBox] = useState<string | null>(null); // the typed command box, with its first words
   const [naming, setNaming] = useState<NameRequest | null>(null); // ARM SETUP's pose name
   const power = usePowerSwitch(); // ARM SETUP's arm chip
 
@@ -484,7 +483,6 @@ export default function CommandsScreen() {
   const startParsed = (p: Parsed) => {
     const req = parsedStart(p, lang);
     if (!req) return;
-    setBox(null);
     // the robot reads it back in English only: in Korean the box above already showed the steps
     const question = lang === 'en' && p.sentence ? p.sentence : t('cmdAskStart');
     const r: Run = { label: 'cmdType', req, ask: parsedMoves(p) ? question : undefined };
@@ -591,7 +589,6 @@ export default function CommandsScreen() {
       { icon: 'volume', label: 'cmdVolume', volume: true, onPress: () => {} },
     ],
     mission: [
-      { icon: 'type', label: 'cmdType', hint: 'cmdTypeHint', wide: true, onPress: () => setBox('') },
       ...TASK_TILES.map(
         (x): Tile => ({
           icon: x.icon,
@@ -704,7 +701,12 @@ export default function CommandsScreen() {
         {group === 'armSetup' ? (
           <ArmSetupPanel size={size} width={inner} power={power} onReport={report} onAsk={setConfirm} onName={setNaming} />
         ) : (
-          <ScrollView style={styles.tilesScroll} contentContainerStyle={[styles.tiles, { gap }]} showsVerticalScrollIndicator={false}>
+          <ScrollView style={styles.tilesScroll} contentContainerStyle={[styles.tiles, { gap }]} showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled">
+            {group === 'mission' && (
+              <View style={{ width: inner }}>
+                <CommandBox size={size} baseUrl={url} examples={EXAMPLES} onStart={startParsed} />
+              </View>
+            )}
             {TILES[group].map((tile) => {
               if (tile.volume)
                 return (
@@ -780,17 +782,6 @@ export default function CommandsScreen() {
           suggestions={text === 'pick' ? (seen ?? []).map((x) => thingText(x, t)) : undefined}
           onSend={sendText}
           onClose={() => setText(null)}
-        />
-      )}
-      {box !== null && (
-        <CommandBox
-          box={area}
-          size={size}
-          baseUrl={url}
-          initial={box}
-          examples={EXAMPLES}
-          onStart={startParsed}
-          onClose={() => setBox(null)}
         />
       )}
       <ConfirmDialog request={confirm} onClose={() => setConfirm(null)} />

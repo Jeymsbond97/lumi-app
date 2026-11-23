@@ -1,5 +1,5 @@
 // The Commands screen's dialogs, in the dark look of ConfirmDialog: a choice (which object, which marker), a text to
-// say or ask, and the typed command box. Each sits in the screen's free middle (between the modes, the task card and
+// say or ask, and the typed command box (MISSIONS shows it in place, not as a dialog). The dialogs sit in the screen's free middle (between the modes, the task card and
 // the Dock) at its top, so a phone's keyboard does not cover it; STOP stays on top of all of them.
 import { useEffect, useRef, useState, type ReactNode } from 'react';
 import { ActivityIndicator, BackHandler, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
@@ -215,25 +215,23 @@ export function TextDialog({
 // ---------- a typed command, read the way voice reads it ----------
 const READ_AFTER_MS = 600; // typing stops this long: read it again (rules only); Enter reads it with the LLM too
 
+/**
+ * Lives in MISSIONS itself, always open (owner, 2026-11-23: no dialog over the task buttons). Not focused on its own,
+ * so a phone's keyboard comes up only when the owner taps the line. START hands it over and empties the line.
+ */
 export function CommandBox({
-  box,
   size,
   baseUrl,
-  initial,
   examples,
   onStart,
-  onClose,
 }: {
-  box: Box;
   size: number;
   baseUrl: string;
-  initial: string;
   examples: TextKey[];
   onStart: (p: Parsed) => void;
-  onClose: () => void;
 }) {
   const { t } = useI18n();
-  const [text, setText] = useState(initial);
+  const [text, setText] = useState('');
   const [parsed, setParsed] = useState<Parsed | null>(null);
   const [reading, setReading] = useState(false);
   const [lost, setLost] = useState(false);
@@ -264,12 +262,11 @@ export function CommandBox({
 
   const canStart = !!parsed?.action && parsed.problems.length === 0 && !reading;
   return (
-    <Sheet box={box} size={size} onClose={onClose}>
+    <View style={[styles.cardInner, { gap: size * 0.9, padding: size * 1.1 }]}>
       <Text style={[styles.title, { fontSize: size * 1.05 }]}>{t('cmdType')}</Text>
       <TextInput
         value={text}
         onChangeText={setText}
-        autoFocus
         maxLength={400}
         placeholder={t('cmdTypePlaceholder')}
         placeholderTextColor={mono.dim}
@@ -277,7 +274,7 @@ export function CommandBox({
         onSubmitEditing={() => readIt(text, true)}
         style={[styles.input, { fontSize: size * 1.05, paddingVertical: size * 0.55 }]}
       />
-      <ScrollView style={styles.scroll} contentContainerStyle={{ gap: size * 0.5 }} keyboardShouldPersistTaps="handled">
+      <View style={{ gap: size * 0.5 }}>
         {!text.trim() && (
           <>
             <Text style={[styles.soft, { fontSize: size * 0.85 }]}>{t('cmdTypeHint')}</Text>
@@ -325,12 +322,21 @@ export function CommandBox({
             )}
           </>
         )}
-      </ScrollView>
+      </View>
       <Buttons size={size}>
-        <Button text={t('cancel')} size={size} onPress={onClose} muted />
-        <Button text={t('cmdStart')} size={size} onPress={() => parsed && onStart(parsed)} disabled={!canStart} />
+        <Button text={t('cmdClear')} size={size} onPress={() => setText('')} disabled={!text} muted />
+        <Button
+          text={t('cmdStart')}
+          size={size}
+          onPress={() => {
+            if (!parsed) return;
+            onStart(parsed);
+            setText('');
+          }}
+          disabled={!canStart}
+        />
       </Buttons>
-    </Sheet>
+    </View>
   );
 }
 
