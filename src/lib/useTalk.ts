@@ -1,15 +1,15 @@
 // What Lumi heard and said, read from the assistant's log while the Talk screen is open and the app in front.
-// GET /assistant/log reads the whole of lumi.log on the Thor (about 6 s for a 900 MB log, 2026-11-23), so it is asked
-// one read at a time and TALK_POLL_MS after the last one ended; a send asks again at once. GET /songs (cheap) says
-// whether Lumi sings now.
+// GET /assistant/log once read the whole of lumi.log on the Thor (about 6 s for a 900 MB log); since 2026-11-23 it reads
+// only the log's end (api/server.py tail), so it is asked every TALK_POLL_MS, still one read at a time; a send asks
+// again at once. GET /songs (cheap) says whether Lumi sings now.
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { AppState } from 'react-native';
 import { read, toSongs, type Song } from './commands';
 import { lastClock, logPath, mergeTalk, toSinging, toTalk, type TalkLine } from './talk';
 
 /** The next read of the log this long after the last one ended. */
-export const TALK_POLL_MS = 8000;
-/** The log answers in about 6 s; this long is a read that is lost. */
+export const TALK_POLL_MS = 3000;
+/** A read that has not answered in this long is lost (an older robot API reads the whole log: about 6 s). */
 export const TALK_READ_MS = 20000;
 
 export interface Talk {
