@@ -146,8 +146,8 @@ describe('requests', () => {
   });
 
   it('turns left with a positive angle', () => {
-    expect(turnRequest('left', 'en').body).toMatchObject({ steps: [{ do: 'turn', deg: 90 }] });
-    expect(turnRequest('right', 'en').body).toMatchObject({ steps: [{ do: 'turn', deg: -90 }] });
+    expect(turnRequest('left', 'en').body).toMatchObject({ steps: [{ do: 'turn', deg: 45 }] });
+    expect(turnRequest('right', 'en').body).toMatchObject({ steps: [{ do: 'turn', deg: -45 }] });
     expect(turnRequest('around', 'en').body).toMatchObject({ steps: [{ do: 'turn', deg: 180 }] });
   });
 

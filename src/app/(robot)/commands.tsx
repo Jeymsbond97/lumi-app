@@ -71,7 +71,7 @@ import { ArmSetupPanel, type ArmReport, type NameRequest } from '../../ui/ArmSet
 import { CommandIcon, type CommandIconName } from '../../ui/CommandIcon';
 import { Joystick, joystickSize } from '../../ui/Joystick';
 import { VolumeButton } from '../../ui/VolumeButton';
-import { ChoiceDialog, LookPad, CommandBox, TextDialog, type Box, type ChoiceField } from '../../ui/CommandDialogs';
+import { ChoiceDialog, LookPad, TurnPad, CommandBox, TextDialog, type Box, type ChoiceField } from '../../ui/CommandDialogs';
 import { ConfirmDialog, type ConfirmRequest } from '../../ui/ConfirmDialog';
 import { NameDialog } from '../../ui/NameDialog';
 import { usePowerSwitch } from '../../ui/usePowerSwitch';
@@ -91,7 +91,7 @@ const GROUPS: { key: Group; label: TextKey }[] = [
   { key: 'armSetup', label: 'cmdGroupArmSetup' },
 ];
 
-type ChoiceKind = 'pick' | 'receive' | 'aside' | 'goto' | 'fetch' | 'carry' | 'drive' | 'turn' | 'sing';
+type ChoiceKind = 'pick' | 'receive' | 'aside' | 'goto' | 'fetch' | 'carry' | 'drive' | 'sing';
 
 /** One tap's request: `ask` is the question before it moves anything; `waits` it answers when done. */
 interface Run {
@@ -162,7 +162,6 @@ const CHOICE_TITLE: Record<ChoiceKind, TextKey> = {
   fetch: 'cmdFetch',
   carry: 'cmdCarry',
   drive: 'cmdDrive',
-  turn: 'cmdTurn',
   sing: 'cmdSing',
 };
 const SKILL_TEXT: Record<SkillState['status'], TextKey> = {
@@ -199,6 +198,7 @@ export default function CommandsScreen() {
   }, []);
   const [choice, setChoice] = useState<ChoiceKind | null>(null);
   const [looking, setLooking] = useState(false); // LOOK's direction pad
+  const [turning, setTurning] = useState(false); // TURN's pad
   /** The head's pose from the last /head/turn answer: quick taps step on from there, not from the 1 s status. */
   const headPose = useRef<{ yaw: number; pitch: number } | null>(null);
   const [values, setValues] = useState<Record<string, string>>({});
@@ -309,6 +309,12 @@ export default function CommandsScreen() {
     headPose.current = headPoseOf(reply.data) ?? headPose.current;
     return step.edge ? t(REACHED[step.edge]) : null;
   };
+  /** TURN's tap: asked first, as every move of the base. */
+  const turnTo = (way: TurnWay) => {
+    const x = TURNS.find((w) => w.id === way);
+    if (x) go({ label: 'cmdTurn', req: turnRequest(way, lang), ask: t(x.ask) });
+  };
+
   const go = (r: Run) => {
     if (!r.ask) return fire(r);
     setConfirm({ title: r.ask, choices: [{ text: t('cmdGo'), onPress: () => fire(r) }] });
@@ -447,8 +453,6 @@ export default function CommandsScreen() {
           { key: 'dir', title: 'cmdChooseDir', options: DIRS.map((d) => ({ id: d.id, label: t(d.label) })) },
           { key: 'm', title: 'cmdChooseDistance', options: DRIVE_METRES.map((m) => ({ id: String(m), label: fill(t('cmdMetres'), { m }) })) },
         ];
-      case 'turn':
-        return [{ key: 'way', title: 'cmdChooseTurn', options: TURNS.map((x) => ({ id: x.id, label: t(x.label) })) }];
       case 'sing':
         return [
           {
@@ -494,10 +498,6 @@ export default function CommandsScreen() {
           ? { label: 'cmdDrive', req: driveRequest(dir.id, Number(v.m), lang), ask: fill(t('cmdAskDrive'), { m: v.m, dir: t(dir.label) }) }
           : null;
       }
-      case 'turn': {
-        const way = TURNS.find((x) => x.id === v.way);
-        return way ? { label: 'cmdTurn', req: turnRequest(way.id, lang), ask: t(way.ask) } : null;
-      }
       case 'sing':
         return { label: 'cmdSing', req: singRequest((songs ?? []).find((s) => s.id === v.song) ?? null, songs !== null) };
     }
@@ -538,8 +538,8 @@ export default function CommandsScreen() {
   const buttons = task ? taskButtons(task) : [];
 
   const TILES: Record<Exclude<Group, 'armSetup'>, Tile[]> = {
-    // the main commands, most used first: Go charge, Wave, Sing, Follow me, Go to; Look first in the next row; then the
-    // rest (owner, 2026-11-23);
+    // the main commands, most used first: Go charge, Wave, Sing, Follow me, Go to; Look and Turn first in the next row;
+    // then the rest (owner, 2026-11-23);
     // with all of MOVING and TALKING (those groups are gone); Volume is the edge button (ui/VolumeButton)
     arm: [
       {
@@ -566,6 +566,7 @@ export default function CommandsScreen() {
       },
       { icon: 'goto', label: 'cmdGoTo', hint: 'cmdGoToHint', onPress: () => open('goto', { marker: firstMarker }) },
       { icon: 'look', label: 'cmdLook', hint: 'cmdLookHint', onPress: () => setLooking(true) },
+      { icon: 'turn', label: 'cmdTurn', hint: 'cmdTurnHint', needs: ['patrol'], onPress: () => setTurning(true) },
       {
         icon: 'come',
         label: 'cmdCome',
@@ -609,7 +610,6 @@ export default function CommandsScreen() {
       { icon: 'say', label: 'cmdSay', hint: 'cmdSayHint', onPress: () => setText('say') },
       { icon: 'ask', label: 'cmdAsk', hint: 'cmdAskHint', onPress: () => setText('ask') },
       { icon: 'aside', label: 'cmdAside', hint: 'cmdAsideHint', needs: ['arm', 'empty'], onPress: () => openSeen('aside') },
-      { icon: 'turn', label: 'cmdTurn', hint: 'cmdTurnHint', needs: ['patrol'], onPress: () => open('turn', { way: 'left' }) },
       { icon: 'drive', label: 'cmdDrive', hint: 'cmdDriveHint', needs: ['patrol'], onPress: () => open('drive', { dir: 'forward', m: '0.5' }) },
     ],
     mission: [
@@ -787,6 +787,7 @@ export default function CommandsScreen() {
           }}
         />
       )}
+      {turning && <TurnPad size={size} onTurn={turnTo} onClose={() => setTurning(false)} />}
       {choice && (
         <ChoiceDialog
           size={size}

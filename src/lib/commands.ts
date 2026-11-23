@@ -326,7 +326,8 @@ export function carryRequest(marker: string, then: CarryThen): Request {
 
 export const driveRequest = (dir: DriveDir, m: number, lang: Lang) => stepsRequest([{ do: 'move', dir, m }], lang);
 
-const TURN_DEG: Record<TurnWay, number> = { left: 90, right: -90, around: 180 };
+// 45 deg a tap, around is half a turn from wherever the base faces now (owner, 2026-11-23; was 90)
+export const TURN_DEG: Record<TurnWay, number> = { left: 45, right: -45, around: 180 };
 export const turnRequest = (way: TurnWay, lang: Lang) => stepsRequest([{ do: 'turn', deg: TURN_DEG[way] }], lang);
 
 // lumi.py LOOK: +yaw = Lumi's left, +pitch = up; the head rests at its lowest pitch (robot/head.py HEAD_REST_PITCH)

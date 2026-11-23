@@ -13,7 +13,7 @@ are plain functions in `src/lib/commands.ts`, tested in `src/lib/__tests__/comma
 - **Groups** on top: ARM & OBJECTS, MISSIONS, ARM SETUP. One group's tiles show at a time, so a
   phone (landscape, about 844 × 390) fits them; the tile grid scrolls. ARM SETUP shows the arm settings panel instead
   of tiles (below). ARM & OBJECTS holds the main commands, most used first (Go charge, Wave, Sing, Follow me, Go to;
-  Look first in the next row, then the rest), with all of the old MOVING and TALKING groups (owner, 2026-11-23).
+  Look and Turn first in the next row, then the rest), with all of the old MOVING and TALKING groups (owner, 2026-11-23).
 - **The joystick** (`ui/Joystick.tsx`, as on Home) sits bottom right; the tiles keep its width free on the right
   (owner, 2026-11-23).
 - **Volume** is not a tile: a speaker button on the left edge where Home has WAVE (`ui/VolumeButton.tsx`). A tap
@@ -56,6 +56,7 @@ are plain functions in `src/lib/commands.ts`, tested in `src/lib/__tests__/comma
 | | Follow me | | `POST /tasks/command` `{text: "follow me"}` | Patrol |
 | | Go to | marker | `POST /agv/go` `{marker}` | |
 | | Look | a pad: four arrows round AHEAD; a tap goes one step at once (no GO): up / down 20° (two taps from the bottom to the top, pitch −5 to 35), left / right 20° to 60°; the key stays white until the head has stopped; at an end the pad says Reached the top / bottom / far left / far right and sends nothing. A tap outside closes it | `POST /head/turn` `{yaw, pitch}` from the head's pose (the last answer, else `/status`), +yaw = left (`lookStep`) | |
+| | Turn | a pad: 45° left, 180° (half a turn from where the base faces), 45° right; each asks first | `POST /tasks/steps` `[{do: turn, deg}]` (+ = left) | Patrol |
 | | Come here | | `POST /tasks/command` `{text: "come here"}` | Patrol |
 | | Pick up | object | `POST /tasks/steps` `[{do: pick, object, colour}]` (as voice reads "pick up the cup") | Greeter or Patrol, arm, empty hand |
 | | Give | | `POST /tasks/give` (arm to the `give` pose) | Greeter or Patrol, arm, holding |
@@ -66,7 +67,6 @@ are plain functions in `src/lib/commands.ts`, tested in `src/lib/__tests__/comma
 | | Say | text | `POST /say` `{text}`; while the assistant runs (it owns the speaker and `/say` is refused) a mission `[{do: say, text}]` | |
 | | Ask | text | `POST /ask` `{question, speak: true}` (the answer is shown too); while the assistant runs `POST /tasks/command` with the question | |
 | | Move object (pick it up, put it down at a free spot nearby) | object | `POST /skills/move` `{object, colour}`, watched on `GET /skills/state` | arm, empty hand |
-| | Turn | left 90°, right 90°, around | `POST /tasks/steps` `[{do: turn, deg}]` (+ = left) | Patrol |
 | | Drive | forward / back / left / right, 0.5, 1 or 2 m | `POST /tasks/steps` `[{do: move, dir, m}]` | Patrol |
 | Missions | Type a command | free text, or an example | `POST /tasks/parse` `{text, llm: false}` 0.6 s after typing stops, `llm: true` on Enter (nothing moves); START sends what it read: `steps` → `/tasks/steps`, `fetch` → `/tasks/fetch`, `carry` → `/tasks/carry`, `give` → `/tasks/give`, `place` → `/tasks/place`, `command` → `/tasks/command` (exactly as the dashboard's Command dialog) | what the robot says in `problems` |
 | | Pause / Resume / Release / Stop | | `POST /tasks/pause`, `/tasks/resume`, `/tasks/release`, `/tasks/stop` | a task that offers it (`taskButtons`) |

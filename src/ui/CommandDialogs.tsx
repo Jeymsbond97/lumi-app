@@ -6,7 +6,7 @@ import { useEffect, useRef, useState, type ReactNode } from 'react';
 import { ActivityIndicator, BackHandler, Pressable, ScrollView, StyleSheet, Text, TextInput, useWindowDimensions, View } from 'react-native';
 import Animated, { FadeIn, FadeOut } from 'react-native-reanimated';
 import { useI18n, type TextKey } from '../lib/i18n';
-import { reasonKey, send, stepLine, stepText, toParsed, type LookDir, type Parsed } from '../lib/commands';
+import { reasonKey, send, stepLine, stepText, toParsed, type LookDir, type Parsed, type TurnWay } from '../lib/commands';
 import Svg, { Path } from 'react-native-svg';
 import { CommandIcon, type CommandIconName } from './CommandIcon';
 import { clamp, fonts, mono } from './theme';
@@ -212,10 +212,13 @@ export function ChoiceDialog({
   );
 }
 
-// ---------- LOOK: a pad ----------
+// ---------- LOOK and TURN: pads ----------
 /** An arrow's path pointing up in a 24 box; turned for the other ways. */
 const ARROW = 'M12 5 L12 19 M6 11 L12 5 L18 11';
 const TURN_OF: Record<Exclude<LookDir, 'centre'>, number> = { up: 0, right: 90, down: 180, left: 270 };
+/** Round arrows: a turn to the left (counter clockwise) and to the right. */
+const TURN_LEFT = 'M4 12 a8 8 0 1 0 2.4 -5.7 M4 4 v4.5 h4.5';
+const TURN_RIGHT = 'M20 12 a8 8 0 1 1 -2.4 -5.7 M20 4 v4.5 h-4.5';
 
 /** A pad in the screen's middle, in the tiles' look; a tap anywhere outside closes it (no button). */
 function PadCard({ size, title, note, onClose, children }: { size: number; title: string; note: string | null; onClose: () => void; children: ReactNode }) {
@@ -329,6 +332,41 @@ export function LookPad({ size, onLook, onClose }: { size: number; onLook: (dir:
           {arrow('down', 'cmdLookDown')}
           {blank}
         </View>
+      </View>
+    </PadCard>
+  );
+}
+
+/** TURN (owner, 2026-11-23): 45 deg left, half a turn, 45 deg right; each asks first, as every move of the base. */
+export function TurnPad({ size, onTurn, onClose }: { size: number; onTurn: (way: TurnWay) => void; onClose: () => void }) {
+  const { t } = useI18n();
+  const { height: h } = useWindowDimensions();
+  const cell = padCell(h);
+  const gap = size * 0.5;
+  const key = (way: TurnWay, label: TextKey, path: string | null) => (
+    <View style={[styles.padCol, { gap: size * 0.4, width: cell * 1.25 }]}>
+      <PadKey cell={cell} round={!path} busy={false} label={t(label)} onPress={() => onTurn(way)}>
+        {(fg) =>
+          path ? (
+            <Svg width={cell * 0.44} height={cell * 0.44} viewBox="0 0 24 24">
+              <Path d={path} stroke={fg} strokeWidth={2} fill="none" strokeLinecap="round" strokeLinejoin="round" />
+            </Svg>
+          ) : (
+            <Text style={[styles.padWord, { fontSize: size * 0.9, color: fg }]}>180°</Text>
+          )
+        }
+      </PadKey>
+      <Text style={[styles.padLabel, { fontSize: size * 0.72 }]} numberOfLines={1}>
+        {t(label)}
+      </Text>
+    </View>
+  );
+  return (
+    <PadCard size={size} title={t('cmdTurn')} note={null} onClose={onClose}>
+      <View style={[styles.padRow, { gap }]}>
+        {key('left', 'cmdTurnLeft', TURN_LEFT)}
+        {key('around', 'cmdTurnAround', null)}
+        {key('right', 'cmdTurnRight', TURN_RIGHT)}
       </View>
     </PadCard>
   );
@@ -559,6 +597,7 @@ const styles = StyleSheet.create({
   padCard: { alignItems: 'center', borderRadius: 16, borderWidth: 1, borderColor: '#2e2e2e', backgroundColor: 'rgba(12,12,14,0.98)' },
   padTitle: { alignSelf: 'flex-start', fontFamily: fonts.monoBold, color: mono.text, letterSpacing: 1, textTransform: 'uppercase' },
   padRow: { flexDirection: 'row', justifyContent: 'center' },
+  padCol: { alignItems: 'center' },
   padKey: {
     alignItems: 'center',
     justifyContent: 'center',
@@ -568,6 +607,7 @@ const styles = StyleSheet.create({
   },
   padCentre: { borderColor: '#555' },
   padWord: { fontFamily: fonts.monoBold, letterSpacing: 1, textTransform: 'uppercase' },
+  padLabel: { fontFamily: fonts.mono, color: mono.soft, textAlign: 'center' },
   padNote: { fontFamily: fonts.mono, color: mono.yellow, textAlign: 'center' },
   padPressed: { backgroundColor: 'rgba(255,255,255,0.14)' },
   card: {
