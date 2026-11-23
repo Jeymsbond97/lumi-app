@@ -175,7 +175,6 @@ const en = {
   stepWaiting: 'Waiting',
   // commands screen (src/app/(robot)/commands.tsx)
   cmdGroupArm: 'Arm & objects',
-  cmdGroupMove: 'Moving',
   cmdGroupTalk: 'Talking',
   cmdGroupMission: 'Missions',
   cmdGroupArmSetup: 'Arm setup',
@@ -657,7 +656,6 @@ const ko: Record<TextKey, string> = {
   stepWaiting: '기다리는 중',
   // commands screen
   cmdGroupArm: '팔과 물건',
-  cmdGroupMove: '이동',
   cmdGroupTalk: '말하기',
   cmdGroupMission: '미션',
   cmdGroupArmSetup: '팔 설정',

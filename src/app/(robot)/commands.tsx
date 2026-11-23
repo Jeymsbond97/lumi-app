@@ -84,10 +84,9 @@ const SEEN_WAIT_MS = 3000; // the torso camera's objects when a choice of object
 const SEEN_POLL_MS = 1000; // Pick up and Move aside: the things seen, read again this often while the list is open
 const DONE_SHOWN_MS = 4000; // a finished tap's "Done" stays this long, then the line shows the task again
 
-type Group = 'arm' | 'move' | 'talk' | 'mission' | 'armSetup';
+type Group = 'arm' | 'talk' | 'mission' | 'armSetup';
 const GROUPS: { key: Group; label: TextKey }[] = [
   { key: 'arm', label: 'cmdGroupArm' },
-  { key: 'move', label: 'cmdGroupMove' },
   { key: 'talk', label: 'cmdGroupTalk' },
   { key: 'mission', label: 'cmdGroupMission' },
   { key: 'armSetup', label: 'cmdGroupArmSetup' },
@@ -516,33 +515,8 @@ export default function CommandsScreen() {
   const buttons = task ? taskButtons(task) : [];
 
   const TILES: Record<Exclude<Group, 'armSetup'>, Tile[]> = {
+    // the main commands, most used first (owner, 2026-11-23): with all of MOVING (that group is gone)
     arm: [
-      { icon: 'pick', label: 'cmdPick', hint: 'cmdPickHint', needs: ['modes', 'arm', 'empty'], onPress: () => openPick() },
-      {
-        icon: 'place',
-        label: 'cmdPlace',
-        hint: 'cmdPlaceHint',
-        needs: ['modes', 'arm', 'holding'],
-        onPress: () => go({ label: 'cmdPlace', req: placeRequest, ask: t('cmdAskPlace') }),
-      },
-      {
-        icon: 'give',
-        label: 'cmdGive',
-        hint: 'cmdGiveHint',
-        needs: ['modes', 'arm', 'holding'],
-        onPress: () => go({ label: 'cmdGive', req: giveRequest, ask: t('cmdAskGive') }),
-      },
-      { icon: 'receive', label: 'cmdReceive', hint: 'cmdReceiveHint', needs: ['modes', 'arm', 'empty'], onPress: () => openThings('receive') },
-      { icon: 'aside', label: 'cmdAside', hint: 'cmdAsideHint', needs: ['arm', 'empty'], onPress: () => openSeen('aside') },
-      {
-        icon: 'wave',
-        label: 'cmdWave',
-        hint: 'cmdWaveHint',
-        needs: ['arm'],
-        onPress: () => go({ label: 'cmdWave', req: waveRequest, ask: t('cmdAskWave'), waits: true }),
-      },
-    ],
-    move: [
       {
         icon: 'come',
         label: 'cmdCome',
@@ -557,12 +531,21 @@ export default function CommandsScreen() {
         needs: ['patrol'],
         onPress: () => go({ label: 'cmdFollow', req: followRequest, ask: t('cmdAskFollow') }),
       },
-      { icon: 'goto', label: 'cmdGoTo', hint: 'cmdGoToHint', onPress: () => open('goto', { marker: firstMarker }) },
+      { icon: 'pick', label: 'cmdPick', hint: 'cmdPickHint', needs: ['modes', 'arm', 'empty'], onPress: () => openPick() },
       {
-        icon: 'dock',
-        label: 'cmdDock',
-        hint: 'cmdDockHint',
-        onPress: () => go({ label: 'cmdDock', req: goRequest(DOCK_MARKER), ask: t('cmdAskDock') }),
+        icon: 'give',
+        label: 'cmdGive',
+        hint: 'cmdGiveHint',
+        needs: ['modes', 'arm', 'holding'],
+        onPress: () => go({ label: 'cmdGive', req: giveRequest, ask: t('cmdAskGive') }),
+      },
+      { icon: 'receive', label: 'cmdReceive', hint: 'cmdReceiveHint', needs: ['modes', 'arm', 'empty'], onPress: () => openThings('receive') },
+      {
+        icon: 'place',
+        label: 'cmdPlace',
+        hint: 'cmdPlaceHint',
+        needs: ['modes', 'arm', 'holding'],
+        onPress: () => go({ label: 'cmdPlace', req: placeRequest, ask: t('cmdAskPlace') }),
       },
       {
         icon: 'fetch',
@@ -581,9 +564,24 @@ export default function CommandsScreen() {
         needs: ['patrol', 'arm', 'holding'],
         onPress: () => open('carry', { to: firstMarker, then: 'hold' }),
       },
-      { icon: 'drive', label: 'cmdDrive', hint: 'cmdDriveHint', needs: ['patrol'], onPress: () => open('drive', { dir: 'forward', m: '0.5' }) },
-      { icon: 'turn', label: 'cmdTurn', hint: 'cmdTurnHint', needs: ['patrol'], onPress: () => open('turn', { way: 'left' }) },
+      { icon: 'goto', label: 'cmdGoTo', hint: 'cmdGoToHint', onPress: () => open('goto', { marker: firstMarker }) },
+      {
+        icon: 'dock',
+        label: 'cmdDock',
+        hint: 'cmdDockHint',
+        onPress: () => go({ label: 'cmdDock', req: goRequest(DOCK_MARKER), ask: t('cmdAskDock') }),
+      },
+      { icon: 'aside', label: 'cmdAside', hint: 'cmdAsideHint', needs: ['arm', 'empty'], onPress: () => openSeen('aside') },
+      {
+        icon: 'wave',
+        label: 'cmdWave',
+        hint: 'cmdWaveHint',
+        needs: ['arm'],
+        onPress: () => go({ label: 'cmdWave', req: waveRequest, ask: t('cmdAskWave'), waits: true }),
+      },
       { icon: 'look', label: 'cmdLook', hint: 'cmdLookHint', onPress: () => open('look', { dir: 'centre' }) },
+      { icon: 'turn', label: 'cmdTurn', hint: 'cmdTurnHint', needs: ['patrol'], onPress: () => open('turn', { way: 'left' }) },
+      { icon: 'drive', label: 'cmdDrive', hint: 'cmdDriveHint', needs: ['patrol'], onPress: () => open('drive', { dir: 'forward', m: '0.5' }) },
     ],
     talk: [
       { icon: 'say', label: 'cmdSay', hint: 'cmdSayHint', onPress: () => setText('say') },
