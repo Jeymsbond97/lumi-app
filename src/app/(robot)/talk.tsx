@@ -4,7 +4,7 @@
 // on the left) switch the assistant on and off. The content sits between the modes on the left, the task card's room on
 // the right, the power chips on top and the Dock, as on Commands.
 // Owner, 2026-11-24: three views side by side (CONVERSATION, ALL WORDS, ERRORS), the one in view lit, so it is always
-// clear where you are.
+// clear where you are; CLEAN empties only the view in front (the others and the robot's log stay).
 import { useState } from 'react';
 import { ScrollView, StyleSheet, Text, useWindowDimensions, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -39,7 +39,7 @@ export default function TalkScreen() {
   const [view, setView] = useState<'talk' | 'all' | 'errors'>('talk');
   const showErrors = view === 'errors';
 
-  const state = talkState(modes, talk.lines, talk.newest, talk.singing !== null);
+  const state = talkState(modes, talk.recent, talk.newest, talk.singing !== null);
   const errors = talk.errors?.lines ?? [];
   const stuck = talk.errors?.stuck ?? false;
   const trouble = errors.length + (stuck ? 1 : 0);
@@ -59,17 +59,28 @@ export default function TalkScreen() {
   const areaLeft = Math.floor((w - inner) / 2);
 
   const stateWords = talk.phase === 'lost' ? t('talkNoLog') : state === 'off' ? t('talkOffHint') : null;
-  const empty = t(talk.phase === 'reading' ? 'talkReading' : talk.phase === 'lost' ? 'talkNoLog' : 'talkEmpty');
-  const lines = view === 'all' ? talk.lines : talk.lines.filter((l) => l.kind !== 'overheard');
+  const empty = t(
+    talk.phase === 'reading'
+      ? 'talkReading'
+      : talk.phase === 'lost'
+        ? 'talkNoLog'
+        : talk.cleaned[view]
+          ? 'talkCleanedEmpty'
+          : 'talkEmpty',
+  );
+  const lines = view === 'all' ? talk.allLines : talk.lines;
+  const noErrors = t(!talk.errors ? 'talkReading' : talk.cleaned.errors ? 'talkCleanedNoErrors' : 'talkNoErrors');
+  const canClean = showErrors ? errors.length > 0 : lines.length > 0;
 
-  const toggle = (on: boolean, label: string, onPress: () => void, red = false) => (
+  const toggle = (on: boolean, label: string, onPress: () => void, red = false, off = false) => (
     <Text
       onPress={() => {
         Haptics.selectionAsync().catch(() => {});
         onPress();
       }}
+      disabled={off}
       accessibilityRole="button"
-      accessibilityState={{ selected: on }}
+      accessibilityState={{ selected: on, disabled: off }}
       suppressHighlighting
       style={[
         styles.toggle,
@@ -77,6 +88,7 @@ export default function TalkScreen() {
         on && styles.toggleOn,
         red && styles.toggleRed,
         on && red && styles.toggleRedOn,
+        off && styles.toggleOff,
       ]}
     >
       {label}
@@ -112,13 +124,12 @@ export default function TalkScreen() {
               trouble > 0,
             )}
           </View>
+          {toggle(false, t('talkClean'), () => talk.clean(view), false, !canClean)}
         </View>
         {showErrors ? (
           <ScrollView style={styles.panel} contentContainerStyle={{ padding: size * 0.9, gap: size * 0.45 }}>
             {stuck && <Text style={[styles.errorLine, styles.errorStuck, { fontSize: size * 0.85 }]}>{t('talkStuck')}</Text>}
-            {errors.length === 0 && !stuck && (
-              <Text style={[styles.statusWords, { fontSize: size * 0.85 }]}>{t(talk.errors ? 'talkNoErrors' : 'talkReading')}</Text>
-            )}
+            {errors.length === 0 && !stuck && <Text style={[styles.statusWords, { fontSize: size * 0.85 }]}>{noErrors}</Text>}
             {[...errors].reverse().map((l, i) => (
               <Text key={`${i}-${l}`} style={[styles.errorLine, { fontSize: size * 0.8 }]} selectable>
                 {l}
@@ -165,6 +176,7 @@ const styles = StyleSheet.create({
   toggleOn: { color: mono.text, borderColor: '#6a6a6a', backgroundColor: 'rgba(255,255,255,0.09)' },
   toggleRed: { color: mono.red, borderColor: 'rgba(255,45,45,0.55)' },
   toggleRedOn: { backgroundColor: 'rgba(255,45,45,0.14)', borderColor: 'rgba(255,45,45,0.8)' },
+  toggleOff: { opacity: 0.35 },
   tabs: { flexDirection: 'row', alignItems: 'center' },
   panel: { flex: 1, borderRadius: 16, borderWidth: 1, borderColor: '#2e2e2e', backgroundColor: 'rgba(255,255,255,0.02)' },
   errorLine: { fontFamily: fonts.mono, color: '#ff8a80' },

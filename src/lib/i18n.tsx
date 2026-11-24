@@ -527,6 +527,9 @@ const en = {
   talkNoErrors: 'No errors lately',
   talkStuck: "The assistant's main loop is stuck",
   talkViewTalk: 'Conversation',
+  talkClean: 'Clean',
+  talkCleanedEmpty: 'Nothing new since you cleaned',
+  talkCleanedNoErrors: 'No new errors since you cleaned',
 };
 
 export type TextKey = keyof typeof en;
@@ -1038,6 +1041,9 @@ const ko: Record<TextKey, string> = {
   talkNoErrors: '최근 오류가 없어요',
   talkStuck: '어시스턴트의 메인 루프가 멈췄어요',
   talkViewTalk: '대화',
+  talkClean: '지우기',
+  talkCleanedEmpty: '지운 뒤로 새 대화가 없어요',
+  talkCleanedNoErrors: '지운 뒤로 새 오류가 없어요',
 };
 
 const STRINGS: Record<Lang, Record<TextKey, string>> = { en, ko };
