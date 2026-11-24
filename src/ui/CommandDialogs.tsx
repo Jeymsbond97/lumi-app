@@ -101,7 +101,23 @@ export interface ChoiceField {
   empty?: TextKey;
   /** Many short names (a map's markers): small tiles in more columns, the name in the middle. */
   grid?: boolean;
+  /** One button showing the choice; a tap opens the options under it (a map's many markers). Dropdowns next to
+   *  each other share a row (FETCH's From and To, owner 2026-11-24). */
+  dropdown?: boolean;
 }
+
+/** The fields in rows: a run of dropdowns is one row, every other field a row of its own. */
+function fieldRows(fields: ChoiceField[]): ChoiceField[][] {
+  const rows: ChoiceField[][] = [];
+  for (const f of fields) {
+    const prev = rows[rows.length - 1];
+    if (f.dropdown && prev && prev[0].dropdown) prev.push(f);
+    else rows.push([f]);
+  }
+  return rows;
+}
+
+const CHEVRON = 'M6 9 L12 15 L18 9';
 
 export function ChoiceDialog({
   size,
@@ -125,6 +141,8 @@ export function ChoiceDialog({
 }) {
   const { t } = useI18n();
   const { width: w, height: h } = useWindowDimensions();
+  /** The dropdown open now. */
+  const [openKey, setOpenKey] = useState<string | null>(null);
   useEffect(() => {
     const sub = BackHandler.addEventListener('hardwareBackPress', () => {
       onClose();
@@ -143,13 +161,18 @@ export function ChoiceDialog({
   const widthFor = (cols: number) => Math.floor((inner - gap * (cols - 1)) / cols);
   const tileW = widthFor(colsFor(size * 9.5, 2, 4));
   const gridW = widthFor(colsFor(size * 6.2, 3, 7));
+  const listCols = colsFor(size * 6.2, 3, 6); // an open dropdown's markers
 
   const option = (f: ChoiceField, o: ChoiceOption, width: number, small: boolean) => {
     const on = !onPick && values[f.key] === o.id;
     return (
       <Pressable
         key={o.id}
-        onPress={() => (onPick ? onPick(f.key, o.id) : onChange(f.key, o.id))}
+        onPress={() => {
+          if (onPick) return onPick(f.key, o.id);
+          onChange(f.key, o.id);
+          if (f.dropdown) setOpenKey(null);
+        }}
         hitSlop={2}
         accessibilityRole="radio"
         accessibilityState={{ selected: on }}
@@ -182,7 +205,56 @@ export function ChoiceDialog({
       <View accessibilityViewIsModal style={[styles.modal, { width: cardW, maxHeight: h * 0.84, padding: pad, gap: size * 1.1 }]}>
         <Text style={[styles.title, { fontSize: size * 1.15 }]}>{title}</Text>
         <ScrollView style={styles.scroll} contentContainerStyle={{ gap: size * 1.2 }} keyboardShouldPersistTaps="handled">
-          {fields.map((f) => {
+          {fieldRows(fields).map((row) => {
+            if (row[0].dropdown) {
+              const opened = row.find((f) => f.key === openKey);
+              const each = Math.floor((inner - gap * (row.length - 1)) / row.length);
+              return (
+                <View key={row.map((f) => f.key).join('+')} style={{ gap: size * 0.6 }}>
+                  <View style={[styles.chips, { gap }]}>
+                    {row.map((f) => {
+                      const on = f.key === openKey;
+                      const chosen = f.options.find((o) => o.id === values[f.key]);
+                      return (
+                        <View key={f.key} style={{ width: each, gap: size * 0.5 }}>
+                          <Text style={[styles.label, { fontSize: size * 0.78 }]}>{t(f.title)}</Text>
+                          <Pressable
+                            onPress={() => setOpenKey(on ? null : f.key)}
+                            hitSlop={2}
+                            accessibilityRole="combobox"
+                            accessibilityLabel={t(f.title)}
+                            accessibilityState={{ expanded: on }}
+                            style={({ pressed }) => [
+                              styles.option,
+                              styles.dropdown,
+                              { height: size * 3.2, paddingHorizontal: size * 0.9, gap: size * 0.6 },
+                              on && styles.dropdownOpen,
+                              pressed && styles.pressed,
+                            ]}
+                          >
+                            {chosen?.icon && <CommandIcon name={chosen.icon} size={size * 1.2} color={mono.soft} />}
+                            <Text style={[styles.optionText, styles.dropdownText, { fontSize: size * 0.95 }]} numberOfLines={1}>
+                              {chosen ? chosen.label : f.empty ? t(f.empty) : ''}
+                            </Text>
+                            <Svg width={size * 1.1} height={size * 1.1} viewBox="0 0 24 24" style={on && styles.chevronUp}>
+                              <Path d={CHEVRON} stroke={mono.soft} strokeWidth={2} fill="none" strokeLinecap="round" strokeLinejoin="round" />
+                            </Svg>
+                          </Pressable>
+                        </View>
+                      );
+                    })}
+                  </View>
+                  {opened && opened.options.length > 0 && (
+                    <View style={[styles.dropdownList, { padding: size * 0.6, gap }]}>
+                      <View style={[styles.chips, { gap }]}>
+                        {opened.options.map((o) => option(opened, o, Math.floor((inner - size * 1.2 - 2 - gap * (listCols - 1)) / listCols), true))}
+                      </View>
+                    </View>
+                  )}
+                </View>
+              );
+            }
+            const f = row[0];
             const top = f.options.filter((o) => o.featured);
             const rest = f.options.filter((o) => !o.featured);
             return (
@@ -584,7 +656,12 @@ const styles = StyleSheet.create({
     borderColor: '#333',
     backgroundColor: 'rgba(255,255,255,0.03)',
   },
-  optionSmall: { justifyContent: 'center', borderRadius: 12 },
+  optionSmall: { justifyContent: 'center', borderRadius: 12, gap: 6 },
+  dropdown: { borderColor: '#4a4a4a' },
+  dropdownOpen: { borderColor: mono.text },
+  dropdownText: { flex: 1 },
+  chevronUp: { transform: [{ rotate: '180deg' }] },
+  dropdownList: { borderRadius: 14, borderWidth: 1, borderColor: '#2a2a2a', backgroundColor: 'rgba(255,255,255,0.02)' },
   optionOn: { borderColor: mono.text, backgroundColor: mono.text },
   optionWords: { flex: 1, gap: 2 },
   optionWordsSmall: { alignItems: 'center' },

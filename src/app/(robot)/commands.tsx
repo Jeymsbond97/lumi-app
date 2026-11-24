@@ -412,6 +412,20 @@ export default function CommandsScreen() {
     ],
   });
 
+  /** FETCH's From and To: Here, then every marker on the map in name order. */
+  const fetchPlace = (key: string, title: TextKey): ChoiceField => ({
+    key,
+    title,
+    empty: 'cmdNoMarkers',
+    dropdown: true,
+    options: [
+      { id: 'here', label: t('cmdHere'), icon: 'come' as const },
+      ...[...markers]
+        .sort((x, y) => x.localeCompare(y, undefined, { numeric: true, sensitivity: 'base' }))
+        .map((m) => ({ id: m, label: m })),
+    ],
+  });
+
   const fields = (kind: ChoiceKind): ChoiceField[] => {
     switch (kind) {
       case 'pick':
@@ -422,10 +436,12 @@ export default function CommandsScreen() {
       case 'goto':
         return [markerField('marker', 'cmdChooseMarker', false)];
       case 'fetch':
+        // objects in one row, From and To as dropdowns side by side, the charger a marker like the others (owner,
+        // 2026-11-24: the marker grids twice made it long and hard to read)
         return [
-          thingField,
-          markerField('from', 'cmdChooseFrom', true),
-          markerField('to', 'cmdChooseTo', true),
+          { ...thingField, grid: true },
+          fetchPlace('from', 'cmdChooseFrom'),
+          fetchPlace('to', 'cmdChooseTo'),
           {
             key: 'finish',
             title: 'cmdChooseFinish',
