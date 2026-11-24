@@ -391,30 +391,16 @@ export default function CommandsScreen() {
     fit: true,
     options: things.map((x) => ({ id: thingId(x), label: thingText(x, t), note: x.seen ? t('cmdSeen') : undefined })),
   };
-  const markerField = (key: string, title: TextKey, here: boolean): ChoiceField => ({
-    key,
-    title,
-    empty: 'cmdNoMarkers',
-    grid: true,
-    // Here and the charger each a row of their own on top; the map's markers under them in name order (p2 before p10)
-    options: [
-      ...(here ? [{ id: 'here', label: t('cmdHere'), icon: 'come' as const, featured: true }] : []),
-      ...(markers.includes(DOCK_MARKER) ? [{ id: DOCK_MARKER, label: t('cmdChargerMarker'), icon: 'dock' as const, featured: true }] : []),
-      ...markers
-        .filter((m) => m !== DOCK_MARKER)
-        .sort((x, y) => x.localeCompare(y, undefined, { numeric: true, sensitivity: 'base' }))
-        .map((m) => ({ id: m, label: m })),
-    ],
-  });
-
-  /** FETCH's From and To: Here, then every marker on the map in name order. */
-  const fetchPlace = (key: string, title: TextKey): ChoiceField => ({
+  /** A choice of where: one dropdown (Here first when it may be here, then every marker on the map in name order,
+   *  the charger a marker like the others). FETCH, GO TO and CARRY alike (owner, 2026-11-24: the grid with its own
+   *  Charger row was long and hard to read). */
+  const placeField = (key: string, title: TextKey, here: boolean): ChoiceField => ({
     key,
     title,
     empty: 'cmdNoMarkers',
     dropdown: true,
     options: [
-      { id: 'here', label: t('cmdHere'), icon: 'come' as const },
+      ...(here ? [{ id: 'here', label: t('cmdHere'), icon: 'come' as const }] : []),
       ...[...markers]
         .sort((x, y) => x.localeCompare(y, undefined, { numeric: true, sensitivity: 'base' }))
         .map((m) => ({ id: m, label: m })),
@@ -429,14 +415,14 @@ export default function CommandsScreen() {
       case 'receive':
         return [thingField];
       case 'goto':
-        return [markerField('marker', 'cmdChooseMarker', false)];
+        return [placeField('marker', 'cmdChooseMarker', false)];
       case 'fetch':
         // objects in one row, From and To as dropdowns side by side, the charger a marker like the others (owner,
         // 2026-11-24: the marker grids twice made it long and hard to read)
         return [
           thingField,
-          fetchPlace('from', 'cmdChooseFrom'),
-          fetchPlace('to', 'cmdChooseTo'),
+          placeField('from', 'cmdChooseFrom', true),
+          placeField('to', 'cmdChooseTo', true),
           {
             key: 'finish',
             title: 'cmdChooseFinish',
@@ -448,7 +434,7 @@ export default function CommandsScreen() {
         ];
       case 'carry':
         return [
-          markerField('to', 'cmdChooseTo', false),
+          placeField('to', 'cmdChooseTo', false),
           {
             key: 'then',
             title: 'cmdChooseThen',
@@ -474,7 +460,7 @@ export default function CommandsScreen() {
   const runFor = (kind: ChoiceKind, v: Record<string, string>): Run | null => {
     const thing = things.find((x) => thingId(x) === v.thing);
     const where = (id: string): Where => (id === 'here' ? 'here' : { marker: id });
-    const said = (id: string) => (id === 'here' ? t('cmdHereSaid') : id === DOCK_MARKER ? t('cmdChargerSaid') : id);
+    const said = (id: string) => (id === 'here' ? t('cmdHereSaid') : id); // a marker by the name the list shows
     switch (kind) {
       case 'pick':
         return thing ? { label: 'cmdPick', req: pickRequest(thing, lang), ask: fill(t('cmdAskPick'), { thing: thingText(thing, t) }) } : null;
