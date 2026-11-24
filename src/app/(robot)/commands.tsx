@@ -17,8 +17,6 @@ import {
   carryRequest,
   comeRequest,
   DOCK_MARKER,
-  DRIVE_METRES,
-  driveRequest,
   fetchRequest,
   fill,
   followRequest,
@@ -51,7 +49,6 @@ import {
   turnRequest,
   waveRequest,
   type CarryThen,
-  type DriveDir,
   type Finish,
   type LookDir,
   type Need,
@@ -91,7 +88,7 @@ const GROUPS: { key: Group; label: TextKey }[] = [
   { key: 'armSetup', label: 'cmdGroupArmSetup' },
 ];
 
-type ChoiceKind = 'pick' | 'receive' | 'aside' | 'goto' | 'fetch' | 'carry' | 'drive' | 'sing';
+type ChoiceKind = 'pick' | 'receive' | 'aside' | 'goto' | 'fetch' | 'carry' | 'sing';
 
 /** One tap's request: `ask` is the question before it moves anything; `waits` it answers when done. */
 interface Run {
@@ -136,13 +133,9 @@ const TASK_TILES: { cmd: TaskCommand; icon: CommandIconName; label: TextKey }[] 
   { cmd: 'stop', icon: 'stop', label: 'stopTask' },
 ];
 
+/** ARM & OBJECTS' last row, centred. */
+const PAIR: TextKey[] = ['cmdAsk', 'cmdSay'];
 const EXAMPLES: TextKey[] = ['cmdEx1', 'cmdEx2', 'cmdEx3', 'cmdEx4'];
-const DIRS: { id: DriveDir; label: TextKey }[] = [
-  { id: 'forward', label: 'cmdDirForward' },
-  { id: 'back', label: 'cmdDirBack' },
-  { id: 'left', label: 'cmdDirLeft' },
-  { id: 'right', label: 'cmdDirRight' },
-];
 const TURNS: { id: TurnWay; label: TextKey; ask: TextKey }[] = [
   { id: 'left', label: 'cmdTurnLeft', ask: 'cmdAskTurnLeft' },
   { id: 'right', label: 'cmdTurnRight', ask: 'cmdAskTurnRight' },
@@ -161,7 +154,6 @@ const CHOICE_TITLE: Record<ChoiceKind, TextKey> = {
   goto: 'cmdGoTo',
   fetch: 'cmdFetch',
   carry: 'cmdCarry',
-  drive: 'cmdDrive',
   sing: 'cmdSing',
 };
 const SKILL_TEXT: Record<SkillState['status'], TextKey> = {
@@ -464,11 +456,6 @@ export default function CommandsScreen() {
             ],
           },
         ];
-      case 'drive':
-        return [
-          { key: 'dir', title: 'cmdChooseDir', options: DIRS.map((d) => ({ id: d.id, label: t(d.label) })) },
-          { key: 'm', title: 'cmdChooseDistance', options: DRIVE_METRES.map((m) => ({ id: String(m), label: fill(t('cmdMetres'), { m }) })) },
-        ];
       case 'sing':
         return [
           {
@@ -508,12 +495,6 @@ export default function CommandsScreen() {
           : null;
       case 'carry':
         return { label: 'cmdCarry', req: carryRequest(v.to, v.then as CarryThen), ask: fill(t('cmdAskCarry'), { to: said(v.to) }) };
-      case 'drive': {
-        const dir = DIRS.find((d) => d.id === v.dir);
-        return dir
-          ? { label: 'cmdDrive', req: driveRequest(dir.id, Number(v.m), lang), ask: fill(t('cmdAskDrive'), { m: v.m, dir: t(dir.label) }) }
-          : null;
-      }
       case 'sing':
         return { label: 'cmdSing', req: singRequest((songs ?? []).find((s) => s.id === v.song) ?? null, songs !== null) };
     }
@@ -554,8 +535,9 @@ export default function CommandsScreen() {
   const buttons = task ? taskButtons(task) : [];
 
   const TILES: Record<Exclude<Group, 'armSetup'>, Tile[]> = {
-    // the main commands, most used first: Go charge, Wave, Sing, Follow me, Go to; Look and Turn first in the next row;
-    // then the rest (owner, 2026-11-23);
+    // the main commands, most used first: Go charge, Wave, Sing, Follow me, Go to; then Look, Turn, Come, Pick up,
+    // Fetch; Take, Give, Put it down, Move object, Carry; Ask and Say last, a row of their own in the middle
+    // (owner, 2026-11-23 and 2026-11-24; Drive is gone: the joystick drives);
     // with all of MOVING and TALKING (those groups are gone); Volume is the edge button (ui/VolumeButton)
     arm: [
       {
@@ -592,21 +574,6 @@ export default function CommandsScreen() {
       },
       { icon: 'pick', label: 'cmdPick', hint: 'cmdPickHint', needs: ['modes', 'arm', 'empty'], onPress: () => openPick() },
       {
-        icon: 'give',
-        label: 'cmdGive',
-        hint: 'cmdGiveHint',
-        needs: ['modes', 'arm', 'holding'],
-        onPress: () => go({ label: 'cmdGive', req: giveRequest, ask: t('cmdAskGive') }),
-      },
-      { icon: 'receive', label: 'cmdReceive', hint: 'cmdReceiveHint', needs: ['modes', 'arm', 'empty'], onPress: () => openThings('receive') },
-      {
-        icon: 'place',
-        label: 'cmdPlace',
-        hint: 'cmdPlaceHint',
-        needs: ['modes', 'arm', 'holding'],
-        onPress: () => go({ label: 'cmdPlace', req: placeRequest, ask: t('cmdAskPlace') }),
-      },
-      {
         icon: 'fetch',
         label: 'cmdFetch',
         hint: 'cmdFetchHint',
@@ -616,6 +583,22 @@ export default function CommandsScreen() {
           setValues((v) => ({ ...v, from: firstMarker, to: 'here', finish: 'hold' }));
         },
       },
+      { icon: 'receive', label: 'cmdReceive', hint: 'cmdReceiveHint', needs: ['modes', 'arm', 'empty'], onPress: () => openThings('receive') },
+      {
+        icon: 'give',
+        label: 'cmdGive',
+        hint: 'cmdGiveHint',
+        needs: ['modes', 'arm', 'holding'],
+        onPress: () => go({ label: 'cmdGive', req: giveRequest, ask: t('cmdAskGive') }),
+      },
+      {
+        icon: 'place',
+        label: 'cmdPlace',
+        hint: 'cmdPlaceHint',
+        needs: ['modes', 'arm', 'holding'],
+        onPress: () => go({ label: 'cmdPlace', req: placeRequest, ask: t('cmdAskPlace') }),
+      },
+      { icon: 'aside', label: 'cmdAside', hint: 'cmdAsideHint', needs: ['arm', 'empty'], onPress: () => openSeen('aside') },
       {
         icon: 'carry',
         label: 'cmdCarry',
@@ -623,10 +606,8 @@ export default function CommandsScreen() {
         needs: ['patrol', 'arm', 'holding'],
         onPress: () => open('carry', { to: firstMarker, then: 'hold' }),
       },
-      { icon: 'say', label: 'cmdSay', hint: 'cmdSayHint', onPress: () => setText('say') },
       { icon: 'ask', label: 'cmdAsk', hint: 'cmdAskHint', onPress: () => setText('ask') },
-      { icon: 'aside', label: 'cmdAside', hint: 'cmdAsideHint', needs: ['arm', 'empty'], onPress: () => openSeen('aside') },
-      { icon: 'drive', label: 'cmdDrive', hint: 'cmdDriveHint', needs: ['patrol'], onPress: () => open('drive', { dir: 'forward', m: '0.5' }) },
+      { icon: 'say', label: 'cmdSay', hint: 'cmdSayHint', onPress: () => setText('say') },
     ],
     mission: [
       ...TASK_TILES.map(
@@ -663,6 +644,9 @@ export default function CommandsScreen() {
   const fit = (n: number) => Math.floor((inner - gap * (n - 1)) / n) - 1;
   const tileW = fit(cols);
   const taskW = fit(TASK_TILES.length);
+  // Ask and Say a row of their own in the middle, as wide together as the three middle tiles above (owner, 2026-11-24)
+  const pairSpan = Math.max(2, cols - 2);
+  const pairW = Math.floor((pairSpan * tileW + (pairSpan - 2) * gap) / 2);
 
   const statusLine = (): { dot: string; head: string; words: string } => {
     if (group === 'armSetup' && power.note) return { dot: mono.yellow, head: t('cmdGroupArmSetup'), words: t(power.note) };
@@ -701,6 +685,40 @@ export default function CommandsScreen() {
     }
   };
   const line = statusLine();
+
+  const renderTile = (tile: Tile, width?: number) => {
+    const why = tile.off ?? blocked(tile.needs ?? [], ready);
+    // MISSIONS' task buttons: one row filling the width, icon beside the word
+    const row = group === 'mission';
+    return (
+      <Pressable
+        key={tile.label}
+        onPress={() => tap(tile)}
+        accessibilityRole="button"
+        accessibilityLabel={t(tile.label)}
+        accessibilityHint={why ? t(why) : tile.hint && t(tile.hint)}
+        style={({ pressed }) => [
+          styles.tile,
+          row
+            ? [styles.tileRow, { width: taskW, minHeight: size * 3.4, padding: size * 0.7, gap: size * 0.6 }]
+            : { width: width ?? (tile.wide ? inner : tileW), minHeight: size * 5.6, padding: size * 0.8, gap: size * 0.35 },
+          tile.red && styles.tileRed,
+          !!why && (row ? styles.tileRowOff : styles.tileOff),
+          pressed && styles.pressed,
+        ]}
+      >
+        <CommandIcon name={tile.icon} size={size * (row ? 1.3 : 1.7)} color={tile.red && !why ? mono.red : mono.text} />
+        <Text style={[styles.tileLabel, { fontSize: size * 0.92 }, tile.red && !why && styles.tileLabelRed]} numberOfLines={row ? 1 : 2}>
+          {t(tile.label)}
+        </Text>
+        {tile.hint && (
+          <Text style={[styles.tileHint, { fontSize: size * 0.72 }]} numberOfLines={2}>
+            {t(tile.hint)}
+          </Text>
+        )}
+      </Pressable>
+    );
+  };
 
   return (
     <View style={styles.root}>
@@ -756,39 +774,12 @@ export default function CommandsScreen() {
                 <CommandBox size={size} baseUrl={url} examples={EXAMPLES} onStart={startParsed} />
               </View>
             )}
-            {TILES[group].map((tile) => {
-              const why = tile.off ?? blocked(tile.needs ?? [], ready);
-              // MISSIONS' task buttons: one row filling the width, icon beside the word
-              const row = group === 'mission';
-              return (
-                <Pressable
-                  key={tile.label}
-                  onPress={() => tap(tile)}
-                  accessibilityRole="button"
-                  accessibilityLabel={t(tile.label)}
-                  accessibilityHint={why ? t(why) : tile.hint && t(tile.hint)}
-                  style={({ pressed }) => [
-                    styles.tile,
-                    row
-                      ? [styles.tileRow, { width: taskW, minHeight: size * 3.4, padding: size * 0.7, gap: size * 0.6 }]
-                      : { width: tile.wide ? inner : tileW, minHeight: size * 5.6, padding: size * 0.8, gap: size * 0.35 },
-                    tile.red && styles.tileRed,
-                    !!why && (row ? styles.tileRowOff : styles.tileOff),
-                    pressed && styles.pressed,
-                  ]}
-                >
-                  <CommandIcon name={tile.icon} size={size * (row ? 1.3 : 1.7)} color={tile.red && !why ? mono.red : mono.text} />
-                  <Text style={[styles.tileLabel, { fontSize: size * 0.92 }, tile.red && !why && styles.tileLabelRed]} numberOfLines={row ? 1 : 2}>
-                    {t(tile.label)}
-                  </Text>
-                  {tile.hint && (
-                    <Text style={[styles.tileHint, { fontSize: size * 0.72 }]} numberOfLines={2}>
-                      {t(tile.hint)}
-                    </Text>
-                  )}
-                </Pressable>
-              );
-            })}
+            {TILES[group].filter((tile) => !PAIR.includes(tile.label)).map((tile) => renderTile(tile))}
+            {group === 'arm' && (
+              <View style={[styles.pairRow, { width: inner, gap }]}>
+                {TILES.arm.filter((tile) => PAIR.includes(tile.label)).map((tile) => renderTile(tile, pairW))}
+              </View>
+            )}
           </ScrollView>
         )}
       </View>
@@ -872,6 +863,7 @@ const styles = StyleSheet.create({
   answer: { fontFamily: fonts.mono, color: mono.text, paddingHorizontal: 4 },
   tilesScroll: { flex: 1 },
   tiles: { flexDirection: 'row', flexWrap: 'wrap', paddingBottom: 8 },
+  pairRow: { flexDirection: 'row', justifyContent: 'center' },
   tile: {
     borderRadius: 16,
     borderWidth: 1,

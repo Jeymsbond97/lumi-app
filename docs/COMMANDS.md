@@ -23,8 +23,9 @@ are plain functions in `src/lib/commands.ts`, tested in `src/lib/__tests__/comma
   `GET /volume` when it opens, `POST /volume {percent}` when the finger lifts.
 - **Choices** (Go to, Fetch, Carry, Turn, Look, Sing, ...) open as a card in the middle of the screen with the options
   as tiles; Cancel and Go are the same size. A choice of markers reads `GET /agv/markers` again every 3 s while it is
-  open, so a marker just added, or the markers of a new map, show at once; the charger (`home`) comes first as
-  Charger.
+  open, so a marker just added, or the markers of a new map, show at once; in Go to and Carry the charger (`home`)
+  comes first as Charger. FETCH has From and To as two dropdowns side by side, the charger a marker like the others
+  (owner, 2026-11-24). ARM & OBJECTS: Ask and Say are a row of their own in the middle; Drive is gone (the joystick drives).
 - **The status line** under the groups: how the last tap in that group went (sending, Lumi is on it, the assistant
   does it, done, refused and the robot's reason, Lumi did not answer); each group keeps its own, so ARM SETUP's taps
   never show on Arm & objects. For "Move object" it follows `/skills/state` (working, done, refused with its reason).
@@ -45,7 +46,7 @@ are plain functions in `src/lib/commands.ts`, tested in `src/lib/__tests__/comma
   A tap on a name starts it at once: no GO and no second question (the owner, 2026-11-19). Further "objects" were
   mostly something else (a blue chair 2.4 m away read as a blue cup, and the pick was refused out of reach).
 - **Anything that moves the arm or the base asks first** in `ConfirmDialog` with a sentence ("Pick up the blue cup?",
-  "Drive 0.5 m forward?"). The head, speech, songs and the volume do not ask.
+  "Go to p1?"). The head, speech, songs and the volume do not ask.
 - Every word is in `src/lib/i18n.tsx` (keys `cmd*`, `obj*`, `col*`), English and Korean.
 
 ## Actions and their endpoints
@@ -61,15 +62,14 @@ are plain functions in `src/lib/commands.ts`, tested in `src/lib/__tests__/comma
 | | Turn | a pad: 45° left, 180° (half a turn from where the base faces), 45° right; each asks first | `POST /tasks/steps` `[{do: turn, deg}]` (+ = left) | Patrol |
 | | Come here | | `POST /tasks/command` `{text: "come here"}` | Patrol |
 | | Pick up | object | `POST /tasks/steps` `[{do: pick, object, colour}]` (as voice reads "pick up the cup") | Greeter or Patrol, arm, empty hand |
-| | Give | | `POST /tasks/give` (arm to the `give` pose) | Greeter or Patrol, arm, holding |
+| | Fetch | object (one row), From and To as dropdowns side by side (Here, then every marker in name order; the charger is a marker like the others), there: keep holding or put on a table | `POST /tasks/fetch` `{object, colour, source, dest, finish}` | Patrol, arm, empty hand |
 | | Take | object | `POST /tasks/steps` `[{do: receive, object, from_hand: true}]` (open hand held out in the `give` pose); Release (task card or Missions) or "okay" closes the hand | Greeter or Patrol, arm, empty hand |
+| | Give | | `POST /tasks/give` (arm to the `give` pose) | Greeter or Patrol, arm, holding |
 | | Put it down | | `POST /tasks/place` `{on: null}` | Greeter or Patrol, arm, holding |
-| | Fetch | object, from (here or a marker), to (here or a marker), there: keep holding or put on a table | `POST /tasks/fetch` `{object, colour, source, dest, finish}` | Patrol, arm, empty hand |
-| | Carry it | marker, then: keep holding, put on a table, hand it over | `POST /tasks/carry` `{dest: {marker}, then, on: null}` | Patrol, arm, holding |
-| | Say | text | `POST /say` `{text}`; while the assistant runs (it owns the speaker and `/say` is refused) a mission `[{do: say, text}]` | |
-| | Ask | text | `POST /ask` `{question, speak: true}` (the answer is shown too); while the assistant runs `POST /tasks/command` with the question | |
 | | Move object (pick it up, put it down at a free spot nearby) | object | `POST /skills/move` `{object, colour}`, watched on `GET /skills/state` | arm, empty hand |
-| | Drive | forward / back / left / right, 0.5, 1 or 2 m | `POST /tasks/steps` `[{do: move, dir, m}]` | Patrol |
+| | Carry it | marker, then: keep holding, put on a table, hand it over | `POST /tasks/carry` `{dest: {marker}, then, on: null}` | Patrol, arm, holding |
+| | Ask | text | `POST /ask` `{question, speak: true}` (the answer is shown too); while the assistant runs `POST /tasks/command` with the question | |
+| | Say | text | `POST /say` `{text}`; while the assistant runs (it owns the speaker and `/say` is refused) a mission `[{do: say, text}]` | |
 | Missions | Type a command | free text, or an example | `POST /tasks/parse` `{text, llm: false}` 0.6 s after typing stops, `llm: true` on Enter (nothing moves); START sends what it read: `steps` → `/tasks/steps`, `fetch` → `/tasks/fetch`, `carry` → `/tasks/carry`, `give` → `/tasks/give`, `place` → `/tasks/place`, `command` → `/tasks/command` (exactly as the dashboard's Command dialog) | what the robot says in `problems` |
 | | Pause / Resume / Release / Stop | | `POST /tasks/pause`, `/tasks/resume`, `/tasks/release`, `/tasks/stop` | a task that offers it (`taskButtons`) |
 
