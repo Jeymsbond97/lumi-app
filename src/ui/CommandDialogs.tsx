@@ -104,6 +104,8 @@ export interface ChoiceField {
   /** One button showing the choice; a tap opens the options under it (a map's many markers). Dropdowns next to
    *  each other share a row (FETCH's From and To, owner 2026-11-24). */
   dropdown?: boolean;
+  /** Each tile as wide as its words ("yellow cup" whole on a tablet, owner 2026-11-24). */
+  fit?: boolean;
 }
 
 /** The fields in rows: a run of dropdowns is one row, every other field a row of its own. */
@@ -118,6 +120,8 @@ function fieldRows(fields: ChoiceField[]): ChoiceField[][] {
 }
 
 const CHEVRON = 'M6 9 L12 15 L18 9';
+/** Rows an open dropdown shows; the rest scrolls. */
+const LIST_ROWS = 4.5;
 
 export function ChoiceDialog({
   size,
@@ -161,25 +165,25 @@ export function ChoiceDialog({
   const widthFor = (cols: number) => Math.floor((inner - gap * (cols - 1)) / cols);
   const tileW = widthFor(colsFor(size * 9.5, 2, 4));
   const gridW = widthFor(colsFor(size * 6.2, 3, 7));
-  const listCols = colsFor(size * 6.2, 3, 6); // an open dropdown's markers
 
-  const option = (f: ChoiceField, o: ChoiceOption, width: number, small: boolean) => {
+  const option = (f: ChoiceField, o: ChoiceOption, width: number | undefined, small: boolean) => {
     const on = !onPick && values[f.key] === o.id;
     return (
       <Pressable
         key={o.id}
-        onPress={() => {
-          if (onPick) return onPick(f.key, o.id);
-          onChange(f.key, o.id);
-          if (f.dropdown) setOpenKey(null);
-        }}
+        onPress={() => (onPick ? onPick(f.key, o.id) : onChange(f.key, o.id))}
         hitSlop={2}
         accessibilityRole="radio"
         accessibilityState={{ selected: on }}
         style={({ pressed }) => [
           styles.option,
           small
-            ? [styles.optionSmall, { width, height: size * 2.9, paddingHorizontal: size * 0.4 }]
+            ? [
+                styles.optionSmall,
+                width === undefined
+                  ? { minWidth: size * 5.5, minHeight: size * 2.9, paddingHorizontal: size * 0.9, paddingVertical: size * 0.35 }
+                  : { width, height: size * 2.9, paddingHorizontal: size * 0.4 },
+              ]
             : { width, minHeight: size * 3.2, paddingHorizontal: size * 0.9, paddingVertical: size * 0.6, gap: size * 0.6 },
           on && styles.optionOn,
           pressed && styles.pressed,
@@ -207,11 +211,9 @@ export function ChoiceDialog({
         <ScrollView style={styles.scroll} contentContainerStyle={{ gap: size * 1.2 }} keyboardShouldPersistTaps="handled">
           {fieldRows(fields).map((row) => {
             if (row[0].dropdown) {
-              const opened = row.find((f) => f.key === openKey);
               const each = Math.floor((inner - gap * (row.length - 1)) / row.length);
               return (
-                <View key={row.map((f) => f.key).join('+')} style={{ gap: size * 0.6 }}>
-                  <View style={[styles.chips, { gap }]}>
+                <View key={row.map((f) => f.key).join('+')} style={[styles.dropdownRow, { gap }]}>
                     {row.map((f) => {
                       const on = f.key === openKey;
                       const chosen = f.options.find((o) => o.id === values[f.key]);
@@ -240,17 +242,44 @@ export function ChoiceDialog({
                               <Path d={CHEVRON} stroke={mono.soft} strokeWidth={2} fill="none" strokeLinecap="round" strokeLinejoin="round" />
                             </Svg>
                           </Pressable>
+                          {/* the list opens right under its own button: a few rows, the rest scrolls (owner, 2026-11-24) */}
+                          {on && f.options.length > 0 && (
+                            <ScrollView
+                              style={[styles.dropdownList, { maxHeight: size * 2.6 * LIST_ROWS + size * 0.6 }]}
+                              contentContainerStyle={{ padding: size * 0.3 }}
+                              nestedScrollEnabled
+                              keyboardShouldPersistTaps="handled"
+                            >
+                              {f.options.map((o) => {
+                                const sel = values[f.key] === o.id;
+                                return (
+                                  <Pressable
+                                    key={o.id}
+                                    onPress={() => {
+                                      onChange(f.key, o.id);
+                                      setOpenKey(null);
+                                    }}
+                                    accessibilityRole="radio"
+                                    accessibilityState={{ selected: sel }}
+                                    style={({ pressed }) => [
+                                      styles.listRow,
+                                      { height: size * 2.6, paddingHorizontal: size * 0.7, gap: size * 0.6 },
+                                      sel && styles.optionOn,
+                                      pressed && !sel && styles.listRowPressed,
+                                    ]}
+                                  >
+                                    {o.icon && <CommandIcon name={o.icon} size={size * 1.1} color={sel ? ON_TEXT : mono.soft} />}
+                                    <Text style={[styles.optionText, { fontSize: size * 0.92 }, sel && styles.optionTextOn]} numberOfLines={1}>
+                                      {o.label}
+                                    </Text>
+                                  </Pressable>
+                                );
+                              })}
+                            </ScrollView>
+                          )}
                         </View>
                       );
                     })}
-                  </View>
-                  {opened && opened.options.length > 0 && (
-                    <View style={[styles.dropdownList, { padding: size * 0.6, gap }]}>
-                      <View style={[styles.chips, { gap }]}>
-                        {opened.options.map((o) => option(opened, o, Math.floor((inner - size * 1.2 - 2 - gap * (listCols - 1)) / listCols), true))}
-                      </View>
-                    </View>
-                  )}
                 </View>
               );
             }
@@ -263,7 +292,9 @@ export function ChoiceDialog({
                 {f.options.length === 0 && f.empty && <Text style={[styles.soft, { fontSize: size * 0.85 }]}>{t(f.empty)}</Text>}
                 {top.length > 0 && <View style={[styles.chips, { gap }]}>{top.map((o) => option(f, o, top.length > 1 ? widthFor(2) : inner, false))}</View>}
                 {rest.length > 0 && (
-                  <View style={[styles.chips, { gap }]}>{rest.map((o) => option(f, o, f.grid ? gridW : tileW, !!f.grid))}</View>
+                  <View style={[styles.chips, { gap }]}>
+                    {rest.map((o) => option(f, o, f.fit ? undefined : f.grid ? gridW : tileW, !!(f.grid || f.fit)))}
+                  </View>
                 )}
               </View>
             );
@@ -661,7 +692,10 @@ const styles = StyleSheet.create({
   dropdownOpen: { borderColor: mono.text },
   dropdownText: { flex: 1 },
   chevronUp: { transform: [{ rotate: '180deg' }] },
-  dropdownList: { borderRadius: 14, borderWidth: 1, borderColor: '#2a2a2a', backgroundColor: 'rgba(255,255,255,0.02)' },
+  dropdownRow: { flexDirection: 'row', alignItems: 'flex-start' },
+  dropdownList: { flexGrow: 0, borderRadius: 14, borderWidth: 1, borderColor: '#3a3a3a', backgroundColor: '#111214' },
+  listRow: { flexDirection: 'row', alignItems: 'center', borderRadius: 10, borderWidth: 1, borderColor: 'transparent' },
+  listRowPressed: { backgroundColor: 'rgba(255,255,255,0.06)' },
   optionOn: { borderColor: mono.text, backgroundColor: mono.text },
   optionWords: { flex: 1, gap: 2 },
   optionWordsSmall: { alignItems: 'center' },

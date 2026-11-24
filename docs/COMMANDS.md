@@ -62,7 +62,7 @@ are plain functions in `src/lib/commands.ts`, tested in `src/lib/__tests__/comma
 | | Turn | a pad: 45° left, 180° (half a turn from where the base faces), 45° right; each asks first | `POST /tasks/steps` `[{do: turn, deg}]` (+ = left) | Patrol |
 | | Come here | | `POST /tasks/command` `{text: "come here"}` | Patrol |
 | | Pick up | object | `POST /tasks/steps` `[{do: pick, object, colour}]` (as voice reads "pick up the cup") | Greeter or Patrol, arm, empty hand |
-| | Fetch | object (one row), From and To as dropdowns side by side (Here, then every marker in name order; the charger is a marker like the others), there: keep holding or put on a table | `POST /tasks/fetch` `{object, colour, source, dest, finish}` | Patrol, arm, empty hand |
+| | Fetch | object (one row), From and To as dropdowns side by side, both starting at Here (each list opens under its own button, a few rows, the rest scrolls: Here, then every marker in name order; the charger is a marker like the others), there: keep holding or put on a table | `POST /tasks/fetch` `{object, colour, source, dest, finish}` | Patrol, arm, empty hand |
 | | Take | object | `POST /tasks/steps` `[{do: receive, object, from_hand: true}]` (open hand held out in the `give` pose); Release (task card or Missions) or "okay" closes the hand | Greeter or Patrol, arm, empty hand |
 | | Give | | `POST /tasks/give` (arm to the `give` pose) | Greeter or Patrol, arm, holding |
 | | Put it down | | `POST /tasks/place` `{on: null}` | Greeter or Patrol, arm, holding |

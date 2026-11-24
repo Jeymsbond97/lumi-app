@@ -386,6 +386,7 @@ export default function CommandsScreen() {
   const thingField: ChoiceField = {
     key: 'thing',
     title: 'cmdChooseObject',
+    fit: true,
     options: things.map((x) => ({ id: thingId(x), label: thingText(x, t), note: x.seen ? t('cmdSeen') : undefined })),
   };
   const markerField = (key: string, title: TextKey, here: boolean): ChoiceField => ({
@@ -431,7 +432,7 @@ export default function CommandsScreen() {
         // objects in one row, From and To as dropdowns side by side, the charger a marker like the others (owner,
         // 2026-11-24: the marker grids twice made it long and hard to read)
         return [
-          { ...thingField, grid: true },
+          thingField,
           fetchPlace('from', 'cmdChooseFrom'),
           fetchPlace('to', 'cmdChooseTo'),
           {
@@ -580,7 +581,7 @@ export default function CommandsScreen() {
         needs: ['patrol', 'arm', 'empty'],
         onPress: () => {
           openThings('fetch');
-          setValues((v) => ({ ...v, from: firstMarker, to: 'here', finish: 'hold' }));
+          setValues((v) => ({ ...v, from: 'here', to: 'here', finish: 'hold' })); // both start at Here (owner, 2026-11-24)
         },
       },
       { icon: 'receive', label: 'cmdReceive', hint: 'cmdReceiveHint', needs: ['modes', 'arm', 'empty'], onPress: () => openThings('receive') },
