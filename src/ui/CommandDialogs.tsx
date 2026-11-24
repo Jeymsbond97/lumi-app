@@ -189,7 +189,9 @@ export function ChoiceDialog({
           pressed && styles.pressed,
         ]}
       >
-        {o.icon && <CommandIcon name={o.icon} size={size * 1.2} color={on ? ON_TEXT : mono.soft} />}
+        {/* in the corner, so the tile keeps its size when chosen */}
+        {on && <View style={[styles.chosenDot, styles.cornerDot, { width: size * 0.38, height: size * 0.38, top: size * 0.3, left: size * 0.3 }]} />}
+        {o.icon && <CommandIcon name={o.icon} size={size * 1.2} color={on ? mono.text : mono.soft} />}
         <View style={small ? styles.optionWordsSmall : styles.optionWords}>
           <Text
             style={[small ? styles.optionTextSmall : styles.optionText, { fontSize: size * 0.92 }, on && styles.optionTextOn]}
@@ -197,7 +199,7 @@ export function ChoiceDialog({
           >
             {o.label}
           </Text>
-          {o.note && <Text style={[styles.note, { fontSize: size * 0.7 }, on && styles.optionTextOn]}>{o.note}</Text>}
+          {o.note && <Text style={[styles.note, { fontSize: size * 0.7 }]}>{o.note}</Text>}
         </View>
       </Pressable>
     );
@@ -268,7 +270,8 @@ export function ChoiceDialog({
                                       pressed && !sel && styles.listRowPressed,
                                     ]}
                                   >
-                                    {o.icon && <CommandIcon name={o.icon} size={size * 1.1} color={sel ? ON_TEXT : mono.soft} />}
+                                    {sel && <View style={[styles.chosenDot, { width: size * 0.42, height: size * 0.42 }]} />}
+                                    {o.icon && <CommandIcon name={o.icon} size={size * 1.1} color={sel ? mono.text : mono.soft} />}
                                     <Text style={[styles.optionText, { fontSize: size * 0.92 }, sel && styles.optionTextOn]} numberOfLines={1}>
                                       {o.label}
                                     </Text>
@@ -306,7 +309,8 @@ export function ChoiceDialog({
           </View>
           {!onPick && (
             <View style={styles.footerButton}>
-              <Button text={t('cmdGo')} size={size} onPress={onDone} disabled={!ready} primary />
+              {/* outlined like Cancel, no white fill (owner, 2026-11-24) */}
+              <Button text={t('cmdGo')} size={size} onPress={onDone} disabled={!ready} />
             </View>
           )}
         </View>
@@ -375,7 +379,7 @@ function PadKey({
         styles.padKey,
         { width: cell, height: cell, borderRadius: round ? cell / 2 : 16 },
         round && styles.padCentre,
-        busy && styles.optionOn,
+        busy && styles.padBusy,
         pressed && !busy && styles.padPressed,
       ]}
     >
@@ -696,12 +700,17 @@ const styles = StyleSheet.create({
   dropdownList: { flexGrow: 0, borderRadius: 14, borderWidth: 1, borderColor: '#3a3a3a', backgroundColor: '#111214' },
   listRow: { flexDirection: 'row', alignItems: 'center', borderRadius: 10, borderWidth: 1, borderColor: 'transparent' },
   listRowPressed: { backgroundColor: 'rgba(255,255,255,0.06)' },
-  optionOn: { borderColor: mono.text, backgroundColor: mono.text },
+  // a chosen option: a light frame, a lit ground and the red dot of a chosen section tab (owner, 2026-11-24: the white
+  // fill did not fit the app)
+  optionOn: { borderColor: mono.text, backgroundColor: 'rgba(255,255,255,0.1)' },
+  chosenDot: { borderRadius: 99, backgroundColor: mono.red },
+  cornerDot: { position: 'absolute' },
+  padBusy: { borderColor: mono.text, backgroundColor: mono.text },
   optionWords: { flex: 1, gap: 2 },
   optionWordsSmall: { alignItems: 'center' },
   optionText: { fontFamily: fonts.mono, color: mono.text },
   optionTextSmall: { fontFamily: fonts.mono, color: mono.text, textAlign: 'center' },
-  optionTextOn: { fontFamily: fonts.monoBold, color: ON_TEXT },
+  optionTextOn: { fontFamily: fonts.monoBold, color: mono.text },
   footer: { flexDirection: 'row', justifyContent: 'flex-end' },
   footerButton: { flexBasis: 0, flexGrow: 1, maxWidth: 220 },
   // the Commands tiles' look (commands.tsx tile): the same border, radius and glass
