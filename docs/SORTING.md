@@ -2,9 +2,9 @@
 
 A SORT button that makes Lumi pick small balls from a plate and drop each into the box of its colour. The arm
 motion is a policy trained with reinforcement learning (Isaac Lab, checked in MuJoCo) that runs on the robot's
-Jetson Thor. Planned, not built yet.
+Jetson Thor.
 
-The full project documents (hardware facts, task design, simulation, RL, sim-to-real, plan, experiment log) live
+The full project documents (hardware facts, task design, simulation, RL, sim-to-real, integration) live
 with the robot code: `docs/sorting/` in lumi-wave on the Thor (Gitea `Jaka_Lumi/Lumi`) and in the Jaka-Lumi
 repository (GitHub). Start with `docs/sorting/README.md` there.
 
@@ -19,4 +19,3 @@ repository (GitHub). Start with `docs/sorting/README.md` there.
 | STOP | the existing STOP on every screen stops the skill |
 
 The robot side (`/skills/sort`, the policy runtime, safety checks) is described in `docs/sorting/06_INTEGRATION.md`.
-The button comes in phase 6 of `docs/sorting/07_PLAN.md`, after the policy works in simulation.
