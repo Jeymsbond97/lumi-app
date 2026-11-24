@@ -2,6 +2,7 @@ import type { Modes } from '../api';
 import { askRequest, sayRequest } from '../commands';
 import {
   afterMark,
+  errorFix,
   NO_MARKS,
   toMarks,
   langOf,
@@ -227,5 +228,33 @@ describe('CLEAN marks', () => {
     expect(toMarks('{"talk":3}')).toEqual(NO_MARKS);
     expect(toMarks('not json')).toEqual(NO_MARKS);
     expect(toMarks(null)).toEqual(NO_MARKS);
+  });
+});
+
+describe('errorFix', () => {
+  // error lines as lumi.log had them on 2026-11-24
+  it.each([
+    ['18:36:18 status failed: timed out', 'fixBase'],
+    ['18:36:20 status failed: [Errno 111] Connection refused', 'fixBase'],
+    ['11:35:47 head error: <urlopen error timed out>', 'fixHead'],
+    ["09:00:00 waist stays turned (going home): MotionError('arm is not powered / enabled')", 'fixArmOff'],
+    ['09:00:00 drive to home STUCK: the base has not moved for 20 s (no free path? glass door) - cancelled', 'fixBaseStuck'],
+    ['09:00:00 go_to p3 refused: Patrol is off', 'fixPatrolOff'],
+    ["09:00:00 FOLLOW refused: I'm on the charger, I can't follow you from here.", 'fixOnCharger'],
+    ['09:00:00 open refused: holding something', 'fixHandFull'],
+    ["09:00:00 mission refused: ['Step 2: my hand is full already.']", 'fixHandFull'],
+    ["09:00:00 carry refused: I'm busy with another task.", 'fixBusy'],
+    ["09:00:00 wave refused: I can't wave while I'm moving.", 'fixMoving'],
+    ["09:00:00 arm fold refused: My arm is in a position I don't know, so I won't move it.", 'fixArmUnknown'],
+    ['09:00:00 fetch refused: The cell phone is too thin or flat for my fingers', 'fixThing'],
+    ['09:00:00 move failed: the arm stopped before the target', 'fixArmMove'],
+    ['09:00:00 camera reopen failed: OSError(5)', 'fixCamera'],
+    ['09:00:00 error: AttributeError("\'NoneType\' object has no attribute \'greeted\'")', 'fixCode'],
+    ['09:00:00 <lambda> failed: timed out', 'fixTimeout'],
+    ['09:00:00 turn failed: [Errno 111] Connection refused', 'fixRefused'],
+    ['09:00:00 search refused: a company or venue question', 'fixRefusedAsk'],
+    ['09:00:00 something odd failed', 'fixOther'],
+  ])('%s', (line, key) => {
+    expect(errorFix(line)).toBe(key);
   });
 });

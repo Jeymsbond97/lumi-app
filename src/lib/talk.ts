@@ -252,3 +252,32 @@ export function toMarks(raw: string | null): TalkMarks {
   }
 }
 
+// ---------- what to do about an error ----------
+// Each error line gets the likeliest fix under it (owner, 2026-11-24). The rules follow the error lines lumi.log had
+// on 2026-11-24 (lumi.py log(): "head error", "<call> failed", "... refused: <reason>", "drive to ... STUCK", ...);
+// the first rule that matches wins, so the narrow ones come first.
+const FIXES: [RegExp, TextKey][] = [
+  [/not powered|not enabled|powered \/ enabled/i, 'fixArmOff'],
+  [/STUCK: the base has not moved/, 'fixBaseStuck'],
+  [/Patrol is off/i, 'fixPatrolOff'],
+  [/on the charger/i, 'fixOnCharger'],
+  [/holding something|hand is full/i, 'fixHandFull'],
+  [/busy with another task|다른 일을/i, 'fixBusy'],
+  [/while I'm moving/i, 'fixMoving'],
+  [/position I don't know/i, 'fixArmUnknown'],
+  [/too thin|too (big|small|wide|heavy)/i, 'fixThing'],
+  [/move failed|stopped before the target|not there after/i, 'fixArmMove'],
+  [/^\S+ status failed/, 'fixBase'],
+  [/head error/i, 'fixHead'],
+  [/camera/i, 'fixCamera'],
+  [/traceback|\w+Error\(|\w+Error:|error: \w+Error/, 'fixCode'],
+  [/connection refused|errno 111/i, 'fixRefused'],
+  [/timed out|timeout/i, 'fixTimeout'],
+  [/refused/i, 'fixRefusedAsk'],
+];
+
+/** The fix to show under an error line. */
+export function errorFix(line: string): TextKey {
+  for (const [re, key] of FIXES) if (re.test(line)) return key;
+  return 'fixOther';
+}
