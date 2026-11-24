@@ -520,7 +520,6 @@ export default function CommandsScreen() {
 
 
   // ---------- the tiles ----------
-  const firstMarker = markers.find((m) => m !== DOCK_MARKER) ?? markers[0] ?? '';
   const buttons = task ? taskButtons(task) : [];
 
   const TILES: Record<Exclude<Group, 'armSetup'>, Tile[]> = {
@@ -551,7 +550,7 @@ export default function CommandsScreen() {
         needs: ['patrol'],
         onPress: () => go({ label: 'cmdFollow', req: followRequest, ask: t('cmdAskFollow') }),
       },
-      { icon: 'goto', label: 'cmdGoTo', hint: 'cmdGoToHint', onPress: () => open('goto', { marker: firstMarker }) },
+      { icon: 'goto', label: 'cmdGoTo', hint: 'cmdGoToHint', onPress: () => open('goto', { marker: '' }) }, // nothing chosen until the owner picks (2026-11-24)
       { icon: 'look', label: 'cmdLook', hint: 'cmdLookHint', onPress: () => setLooking(true) },
       { icon: 'turn', label: 'cmdTurn', hint: 'cmdTurnHint', needs: ['patrol'], onPress: () => setTurning(true) },
       {
@@ -593,7 +592,7 @@ export default function CommandsScreen() {
         label: 'cmdCarry',
         hint: 'cmdCarryHint',
         needs: ['patrol', 'arm', 'holding'],
-        onPress: () => open('carry', { to: firstMarker, then: 'hold' }),
+        onPress: () => open('carry', { to: '', then: 'hold' }),
       },
       { icon: 'ask', label: 'cmdAsk', hint: 'cmdAskHint', onPress: () => setText('ask') },
       { icon: 'say', label: 'cmdSay', hint: 'cmdSayHint', onPress: () => setText('say') },

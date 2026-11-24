@@ -161,7 +161,7 @@ export function ChoiceDialog({
   const cardW = Math.min(w - 32, clamp(320, 0.6 * w, size * 44));
   const pad = size * 1.3;
   const gap = size * 0.6;
-  const inner = cardW - 2 * pad;
+  const inner = cardW - 2 * pad - 2; // the card's 1 px border on each side, else the right edge is cut
   const colsFor = (min: number, lo: number, hi: number) => clamp(lo, Math.floor((inner + gap) / (min + gap)), hi);
   const widthFor = (cols: number) => Math.floor((inner - gap * (cols - 1)) / cols);
   const tileW = widthFor(colsFor(size * 9.5, 2, 4));
@@ -238,8 +238,8 @@ export function ChoiceDialog({
                             ]}
                           >
                             {chosen?.icon && <CommandIcon name={chosen.icon} size={size * 1.2} color={mono.soft} />}
-                            <Text style={[styles.optionText, styles.dropdownText, { fontSize: size * 0.95 }]} numberOfLines={1}>
-                              {chosen ? chosen.label : f.empty ? t(f.empty) : ''}
+                            <Text style={[styles.optionText, styles.dropdownText, { fontSize: size * 0.95 }, !chosen && styles.placeholder]} numberOfLines={1}>
+                              {chosen ? chosen.label : f.options.length ? t('cmdSelect') : f.empty ? t(f.empty) : ''}
                             </Text>
                             <Svg width={size * 1.1} height={size * 1.1} viewBox="0 0 24 24" style={on && styles.chevronUp}>
                               <Path d={CHEVRON} stroke={mono.soft} strokeWidth={2} fill="none" strokeLinecap="round" strokeLinejoin="round" />
@@ -698,7 +698,9 @@ const styles = StyleSheet.create({
   dropdownText: { flex: 1 },
   chevronUp: { transform: [{ rotate: '180deg' }] },
   dropdownRow: { flexDirection: 'row', alignItems: 'flex-start' },
-  dropdownList: { flexGrow: 0, borderRadius: 14, borderWidth: 1, borderColor: '#3a3a3a', backgroundColor: '#111214' },
+  // a quiet ground a shade lighter than the card, no frame (owner, 2026-11-24: the frame stood out)
+  dropdownList: { flexGrow: 0, borderRadius: 14, backgroundColor: 'rgba(255,255,255,0.045)' },
+  placeholder: { color: mono.soft },
   listRow: { flexDirection: 'row', alignItems: 'center', borderRadius: 10, borderWidth: 1, borderColor: 'transparent' },
   listRowPressed: { backgroundColor: 'rgba(255,255,255,0.06)' },
   // a chosen option: a light frame, a lit ground and the red dot of a chosen section tab (owner, 2026-11-24: the white
