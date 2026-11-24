@@ -93,7 +93,9 @@ export default function TalkScreen() {
           >
             <View style={[styles.statusDot, { width: size * 0.55, height: size * 0.55, backgroundColor: STATE_DOT[state] }]} />
             <Text style={[styles.statusHead, { fontSize: size * 0.8 }]}>{t('talkAssistant')}</Text>
-            <Text style={[styles.statusState, { fontSize: size * 0.85 }]}>{t(TALK_STATE_TEXT[state])}</Text>
+            <Text style={[styles.statusState, { fontSize: size * 0.85 }]} numberOfLines={1}>
+              {t(TALK_STATE_TEXT[state])}
+            </Text>
             {stateWords && (
               <Text style={[styles.statusWords, { fontSize: size * 0.78 }]} numberOfLines={1}>
                 {stateWords}
@@ -147,7 +149,7 @@ const styles = StyleSheet.create({
   },
   statusDot: { borderRadius: 99 },
   statusHead: { fontFamily: fonts.monoBold, color: mono.text, letterSpacing: 1.2, textTransform: 'uppercase' },
-  statusState: { fontFamily: fonts.mono, color: mono.text },
+  statusState: { fontFamily: fonts.mono, color: mono.text, flexShrink: 1 },
   statusWords: { fontFamily: fonts.mono, color: mono.soft, flexShrink: 1 },
   toggle: {
     fontFamily: fonts.mono,
