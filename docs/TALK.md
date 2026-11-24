@@ -15,9 +15,19 @@ later; COMMANDS has SAY and ASK.
   line has its clock time, who spoke (Visitor, Lumi), an EN or KO mark for the language it was spoken in, and Typed for
   words that came from a typed command. Wake words are dimmed, songs show their title, a divider marks
   "Talk ended at HH:MM". Up to 200 lines are kept while the screen is open (`KEEP_LINES`).
-- **ALL WORDS:** also shows what the mics heard that was not meant for Lumi (`heard '...' (no wake word)`).
-- **ERRORS:** the assistant log's error lines instead of the conversation, newest on top, selectable. The button turns
-  red with a count ("Errors 3") when there are any; a stuck main loop has its own line.
+- **Three views side by side** (owner, 2026-11-24), the one in front lit: **CONVERSATION** (only words between
+  visitors and Lumi), **ALL WORDS** (also what the mics heard that was not meant for Lumi: `heard '...' (no wake
+  word)`, marked "Not for Lumi") and **ERRORS**. ERRORS turns red with a count ("Errors 3") when there are any.
+- **ERRORS:** the assistant log's error lines, newest on top, selectable; under each a FIX line with what to do
+  (`lib/talk.ts errorFix`: rules made from the error lines lumi.log had on 2026-11-24; first match wins; anything
+  unknown says "if it repeats, switch Greeter off and on, then send the line to the developer"). A stuck main loop has
+  its own line and fix.
+- **CLEAN** empties only the view in front: CONVERSATION, ALL WORDS and ERRORS each on their own (cleaning
+  CONVERSATION leaves ALL WORDS full); the robot's log is not touched. The screen keeps a mark per view and robot in
+  AsyncStorage (`talkMarks:<robot url>`, `{talk, all, errors}`): the newest line the view had when cleaned.
+  Reads show only lines after the mark (when the mark has left the read, all of it is newer), so a reload or a new day
+  does not bring the cleaned lines back. Dim when there is nothing to clean. The assistant chip reads the last read
+  as it came, so cleaning does not change it.
 - The volume button on the left edge, as on COMMANDS.
 
 ## Robot endpoints (all GET)

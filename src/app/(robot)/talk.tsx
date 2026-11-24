@@ -4,7 +4,8 @@
 // on the left) switch the assistant on and off. The content sits between the modes on the left, the task card's room on
 // the right, the power chips on top and the Dock, as on Commands.
 // Owner, 2026-11-24: three views side by side (CONVERSATION, ALL WORDS, ERRORS), the one in view lit, so it is always
-// clear where you are; CLEAN empties only the view in front (the others and the robot's log stay).
+// clear where you are; CLEAN empties only the view in front (the others and the robot's log stay); each error says
+// what to do about it.
 import { useState } from 'react';
 import { ScrollView, StyleSheet, Text, useWindowDimensions, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -13,7 +14,7 @@ import * as Haptics from 'expo-haptics';
 import { fill } from '../../lib/commands';
 import { useI18n } from '../../lib/i18n';
 import { useRobot } from '../../lib/robot';
-import { TALK_STATE_TEXT, talkState, type TalkState } from '../../lib/talk';
+import { errorFix, TALK_STATE_TEXT, talkState, type TalkState } from '../../lib/talk';
 import { useTalk } from '../../lib/useTalk';
 import { TalkLog } from '../../ui/TalkLog';
 import { VolumeButton } from '../../ui/VolumeButton';
@@ -95,6 +96,21 @@ export default function TalkScreen() {
     </Text>
   );
 
+  // an error and, under it, what to do about it
+  const fixed = (line: string, fix: string, bold = false) => (
+    <View style={{ gap: size * 0.25 }}>
+      <Text style={[styles.errorLine, bold && styles.errorStuck, { fontSize: size * 0.8 }]} selectable>
+        {line}
+      </Text>
+      <View style={[styles.fixRow, { gap: size * 0.45 }]}>
+        <Text style={[styles.fixTag, { fontSize: size * 0.6, paddingHorizontal: size * 0.35 }]}>{t('talkFix')}</Text>
+        <Text style={[styles.fixWords, { fontSize: size * 0.78 }]} selectable>
+          {fix}
+        </Text>
+      </View>
+    </View>
+  );
+
   return (
     <View style={styles.root}>
       <View style={[styles.area, { left: areaLeft, top, bottom, width: inner, gap: size * 0.7 }]}>
@@ -127,13 +143,11 @@ export default function TalkScreen() {
           {toggle(false, t('talkClean'), () => talk.clean(view), false, !canClean)}
         </View>
         {showErrors ? (
-          <ScrollView style={styles.panel} contentContainerStyle={{ padding: size * 0.9, gap: size * 0.45 }}>
-            {stuck && <Text style={[styles.errorLine, styles.errorStuck, { fontSize: size * 0.85 }]}>{t('talkStuck')}</Text>}
+          <ScrollView style={styles.panel} contentContainerStyle={{ padding: size * 0.9, gap: size * 0.9 }}>
+            {stuck && fixed(t('talkStuck'), t('fixStuck'), true)}
             {errors.length === 0 && !stuck && <Text style={[styles.statusWords, { fontSize: size * 0.85 }]}>{noErrors}</Text>}
             {[...errors].reverse().map((l, i) => (
-              <Text key={`${i}-${l}`} style={[styles.errorLine, { fontSize: size * 0.8 }]} selectable>
-                {l}
-              </Text>
+              <View key={`${i}-${l}`}>{fixed(l, t(errorFix(l)))}</View>
             ))}
           </ScrollView>
         ) : (
@@ -178,6 +192,19 @@ const styles = StyleSheet.create({
   toggleRedOn: { backgroundColor: 'rgba(255,45,45,0.14)', borderColor: 'rgba(255,45,45,0.8)' },
   toggleOff: { opacity: 0.35 },
   tabs: { flexDirection: 'row', alignItems: 'center' },
+  fixRow: { flexDirection: 'row', alignItems: 'flex-start' },
+  fixTag: {
+    fontFamily: fonts.monoBold,
+    color: mono.green,
+    letterSpacing: 1,
+    textTransform: 'uppercase',
+    borderWidth: 1,
+    borderColor: 'rgba(80,220,120,0.45)',
+    borderRadius: 6,
+    overflow: 'hidden',
+    marginTop: 1,
+  },
+  fixWords: { flex: 1, fontFamily: fonts.mono, color: mono.text },
   panel: { flex: 1, borderRadius: 16, borderWidth: 1, borderColor: '#2e2e2e', backgroundColor: 'rgba(255,255,255,0.02)' },
   errorLine: { fontFamily: fonts.mono, color: '#ff8a80' },
   errorStuck: { fontFamily: fonts.monoBold },
