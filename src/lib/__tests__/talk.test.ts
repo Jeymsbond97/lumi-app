@@ -1,6 +1,9 @@
 import type { Modes } from '../api';
 import { askRequest, sayRequest } from '../commands';
 import {
+  afterMark,
+  NO_MARKS,
+  toMarks,
   langOf,
   lastClock,
   localLine,
@@ -196,5 +199,33 @@ describe('assistant errors', () => {
       stuck: true,
     });
     expect(toTalkErrors(null)).toEqual({ lines: [], stuck: false });
+  });
+});
+
+describe('CLEAN marks', () => {
+  const id = (x: string) => x;
+  it('shows only what comes after the mark', () => {
+    expect(afterMark(['a', 'b', 'c', 'd'], 'b', id)).toEqual(['c', 'd']);
+    expect(afterMark(['a', 'b'], 'b', id)).toEqual([]);
+  });
+  it('shows everything without a mark or when the mark has left the read', () => {
+    expect(afterMark(['a', 'b'], null, id)).toEqual(['a', 'b']);
+    expect(afterMark(['c', 'd'], 'b', id)).toEqual(['c', 'd']);
+  });
+  it('takes the last copy of the mark', () => {
+    expect(afterMark(['x', 'a', 'x', 'b'], 'x', id)).toEqual(['b']);
+  });
+  it('hides a cleaned talk line in the next read', () => {
+    const first = parseTalkLog(LOG);
+    const mark = first[first.length - 1].key;
+    const next = parseTalkLog([...LOG, '17:00:01 lumi (1.0 s): New words.']);
+    expect(afterMark(next, mark, (l) => l.key).map((l) => l.text)).toEqual(['New words.']);
+  });
+  it('reads the stored marks, anything broken is none', () => {
+    expect(toMarks('{"talk":"k","all":"a","errors":"e"}')).toEqual({ talk: 'k', all: 'a', errors: 'e' });
+    expect(toMarks('{"errors":"e"}')).toEqual({ ...NO_MARKS, errors: 'e' });
+    expect(toMarks('{"talk":3}')).toEqual(NO_MARKS);
+    expect(toMarks('not json')).toEqual(NO_MARKS);
+    expect(toMarks(null)).toEqual(NO_MARKS);
   });
 });

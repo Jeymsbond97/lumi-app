@@ -219,3 +219,36 @@ export function toTalkErrors(raw: unknown): TalkErrors {
   const lines = Array.isArray(r?.errors) ? r.errors.filter((l): l is string => typeof l === 'string' && l.trim() !== '') : [];
   return { lines, stuck: r?.stuck === true };
 }
+
+// ---------- CLEAN ----------
+// CLEAN empties the view in front only (owner, 2026-11-24: CONVERSATION, ALL WORDS and ERRORS each on their own), on
+// the screen, not in the robot's log (yesterday's lines stayed). Each view keeps a mark:
+// the newest line it had when cleaned. A read shows only what comes after the mark; when the mark has scrolled out of
+// the read, everything in it is newer (the log only grows at its end).
+
+/** The Talk screen's views: the conversation, all words the mics caught, the assistant's errors. */
+export type TalkView = 'talk' | 'all' | 'errors';
+export const TALK_VIEWS: TalkView[] = ['talk', 'all', 'errors'];
+
+/** The newest line each view had when it was cleaned; null: never cleaned. */
+export type TalkMarks = Record<TalkView, string | null>;
+export const NO_MARKS: TalkMarks = { talk: null, all: null, errors: null };
+
+/** What comes after the mark (by `id`), oldest first as given. */
+export function afterMark<T>(items: T[], mark: string | null, id: (x: T) => string): T[] {
+  if (mark === null) return items;
+  for (let i = items.length - 1; i >= 0; i--) if (id(items[i]) === mark) return items.slice(i + 1);
+  return items;
+}
+
+/** The marks kept in AsyncStorage; anything else is no marks. */
+export function toMarks(raw: string | null): TalkMarks {
+  try {
+    const m = raw ? (JSON.parse(raw) as Partial<Record<TalkView, unknown>>) : null;
+    const one = (v: TalkView) => (typeof m?.[v] === 'string' ? (m[v] as string) : null);
+    return { talk: one('talk'), all: one('all'), errors: one('errors') };
+  } catch {
+    return NO_MARKS;
+  }
+}
+
