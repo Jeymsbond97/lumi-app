@@ -121,24 +121,29 @@ export interface Thing {
 const isObject = (v: unknown): v is ObjectName => OBJECTS.includes(v as ObjectName);
 const isColour = (v: unknown): v is Colour => COLOURS.includes(v as Colour);
 
+/** The objects Take and Fetch offer, always these and in this order (owner, 2026-11-24: no orange or banana; white
+ *  and grey cups before the bottle). The robot still knows the others: a typed request may name them. */
+export const OFFERED: { object: ObjectName; colour: Colour | null }[] = [
+  { object: 'cup', colour: null },
+  { object: 'cup', colour: 'white' },
+  { object: 'cup', colour: 'grey' },
+  { object: 'bottle', colour: null },
+  { object: 'apple', colour: null },
+];
+
 /**
- * The choice of objects: the ones the torso camera sees now (GET /objects), nearest first and each once, then every
- * object Lumi knows in any colour.
+ * The choice of objects: the offered list, each marked seen when the torso camera sees one like it within
+ * `reachMm` (seenThings). A plain "cup" is any cup of any colour, as the robot takes it (colour null: the nearest
+ * steady cup it can reach); "grey cup" only a grey one. A far "cup" is most often something else, so only what is in
+ * reach counts (2026-11-24: a blue and a grey cup were marked seen with no cup in sight).
  */
-export function thingChoices(rawObjects: unknown): Thing[] {
-  const list = (rawObjects as { objects?: unknown } | null)?.objects;
-  const seen = (Array.isArray(list) ? list : [])
-    .filter((o): o is { name: ObjectName; colour?: unknown; distance_m?: unknown } => !!o && isObject((o as { name?: unknown }).name))
-    .sort((a, b) => dist(a.distance_m) - dist(b.distance_m));
-  const out: Thing[] = [];
-  for (const o of seen) {
-    const colour = isColour(o.colour) ? o.colour : null;
-    if (!out.some((t) => t.object === o.name && t.colour === colour)) out.push({ object: o.name, colour, seen: true });
-  }
-  for (const object of OBJECTS) out.push({ object, colour: null, seen: false });
-  return out;
+export function thingChoices(rawObjects: unknown, reachMm: number): Thing[] {
+  const near = seenThings(rawObjects, reachMm);
+  return OFFERED.map((o) => ({
+    ...o,
+    seen: near.some((t) => t.object === o.object && (o.colour === null || t.colour === o.colour)),
+  }));
 }
-const dist = (v: unknown) => (typeof v === 'number' && Number.isFinite(v) ? v : 99);
 
 /**
  * How far from the arm's base (mm, level) a thing seen may be to be offered: the arm's own reach (tasks/fetch.py
@@ -168,7 +173,8 @@ export function seenThings(rawObjects: unknown, reachMm: number): Thing[] {
   return out;
 }
 
-export const thingId = (t: Thing) => `${t.colour ?? 'any'}:${t.object}${t.seen ? ':seen' : ''}`;
+/** A choice's id: the same whether it is seen or not, so a choice stays chosen when the camera's reading comes. */
+export const thingId = (t: Thing) => `${t.colour ?? 'any'}:${t.object}`;
 
 // Other ways people type a colour, read along with the app's own words (COLOUR_TEXT in both languages).
 const COLOUR_EXTRA: Partial<Record<Colour, string[]>> = {

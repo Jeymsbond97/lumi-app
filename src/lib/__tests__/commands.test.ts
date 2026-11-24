@@ -65,27 +65,28 @@ describe('fill', () => {
 });
 
 describe('thingChoices', () => {
-  it('offers what the camera sees, nearest first and once each, then every object in any colour', () => {
+  const label = (t: { object: string; colour: string | null; seen: boolean }) => `${t.colour ?? ''} ${t.object}${t.seen ? ' (seen)' : ''}`.trim();
+
+  it('always offers cup, white cup, grey cup, bottle and apple, marking what is seen in reach', () => {
     const raw = {
       objects: [
-        { name: 'chair', colour: 'blue', distance_m: 1 },
-        { name: 'cup', colour: 'white', distance_m: 0.9 },
-        { name: 'cup', colour: 'blue', distance_m: 0.6 },
-        { name: 'cup', colour: 'blue', distance_m: 0.7 },
-        { name: 'apple', colour: 'mauve', distance_m: null },
+        { name: 'chair', colour: 'blue', position_mm: [300, 0, 0] },
+        { name: 'cup', colour: 'blue', position_mm: [400, 0, 0] },
+        { name: 'cup', colour: 'grey', position_mm: [2000, 0, 0] },
+        { name: 'banana', colour: 'yellow', position_mm: [300, 0, 0] },
       ],
     };
-    const got = thingChoices(raw);
-    expect(got.slice(0, 3)).toEqual([
-      { object: 'cup', colour: 'blue', seen: true },
-      { object: 'cup', colour: 'white', seen: true },
-      { object: 'apple', colour: null, seen: true },
-    ]);
-    expect(got.slice(3).map((t) => t.object)).toEqual(['cup', 'bottle', 'apple', 'orange', 'banana']);
+    // a blue cup in reach: any cup is there, but no white one; the grey one is too far to count
+    expect(thingChoices(raw, REACH_MM.arm).map(label)).toEqual(['cup (seen)', 'white cup', 'grey cup', 'bottle', 'apple']);
   });
 
-  it('still offers every object when the camera does not answer', () => {
-    expect(thingChoices(null)).toHaveLength(5);
+  it('marks a colour only when that colour is seen', () => {
+    const raw = { objects: [{ name: 'cup', colour: 'white', position_mm: [500, 0, 0] }, { name: 'apple', colour: 'red', position_mm: [600, 0, 0] }] };
+    expect(thingChoices(raw, REACH_MM.arm).map(label)).toEqual(['cup (seen)', 'white cup (seen)', 'grey cup', 'bottle', 'apple (seen)']);
+  });
+
+  it('offers the list unmarked when the camera does not answer', () => {
+    expect(thingChoices(null, REACH_MM.arm).map(label)).toEqual(['cup', 'white cup', 'grey cup', 'bottle', 'apple']);
   });
 
   it('says the colour before the object', () => {

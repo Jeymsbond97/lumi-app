@@ -179,7 +179,7 @@ export default function CommandsScreen() {
   const [songs, setSongs] = useState<Song[] | null>(null);
   const [holding, setHolding] = useState<boolean | null>(null);
   const [skill, setSkill] = useState<(SkillState & { readAt: number }) | null>(null);
-  const [things, setThings] = useState<Thing[]>(() => thingChoices(null));
+  const [things, setThings] = useState<Thing[]>(() => thingChoices(null, REACH_MM.arm));
   /** Pick up and Move aside: the things the torso camera sees near now; null until the first reading. */
   const [seen, setSeen] = useState<Thing[] | null>(null);
   /** Each group's own last tap: a group never shows another group's result. */
@@ -371,15 +371,16 @@ export default function CommandsScreen() {
   };
 
   const openThings = (kind: ChoiceKind) => {
-    const known = thingChoices(null);
+    const known = thingChoices(null, reach);
     setThings(known);
     open(kind, { thing: thingId(known[0]) });
     read(url, '/objects', SEEN_WAIT_MS).then((r) => {
       if (r === null) return;
-      const seen = thingChoices(r);
+      const seen = thingChoices(r, reach);
       setThings(seen);
-      // the nearest thing seen is the first choice, unless one was picked meanwhile
-      setValues((v) => (v.thing === thingId(known[0]) ? { ...v, thing: thingId(seen[0]) } : v));
+      // the first offered thing seen is the first choice, unless one was picked meanwhile
+      const first = seen.find((x) => x.seen) ?? seen[0];
+      setValues((v) => (v.thing === thingId(known[0]) ? { ...v, thing: thingId(first) } : v));
     });
   };
 

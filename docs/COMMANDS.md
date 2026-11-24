@@ -21,6 +21,9 @@ are plain functions in `src/lib/commands.ts`, tested in `src/lib/__tests__/comma
 - **Volume** is not a tile: a speaker button on the left edge where Home has WAVE (`ui/VolumeButton.tsx`). A tap
   opens a small upright fader beside it, rising from the button so it stays clear of the modes: drag, or + / −;
   `GET /volume` when it opens, `POST /volume {percent}` when the finger lifts.
+- **Objects** (Take, Fetch): always cup, white cup, grey cup, bottle, apple (owner, 2026-11-24). A plain one goes as
+  colour `null`: the robot takes the nearest steady one it can reach, any colour; white or grey cup only that colour.
+  Seen now only for one within the arm's reach (Patrol on: 1.5 m), since far "cups" are mostly other things.
 - **Choices** (Go to, Fetch, Carry, Turn, Look, Sing, ...) open as a card in the middle of the screen with the options
   as tiles; Cancel and Go are the same size. A choice of markers reads `GET /agv/markers` again every 3 s while it is
   open, so a marker just added, or the markers of a new map, show at once; in Go to and Carry the charger (`home`)
@@ -62,8 +65,8 @@ are plain functions in `src/lib/commands.ts`, tested in `src/lib/__tests__/comma
 | | Turn | a pad: 45° left, 180° (half a turn from where the base faces), 45° right; each asks first | `POST /tasks/steps` `[{do: turn, deg}]` (+ = left) | Patrol |
 | | Come here | | `POST /tasks/command` `{text: "come here"}` | Patrol |
 | | Pick up | object | `POST /tasks/steps` `[{do: pick, object, colour}]` (as voice reads "pick up the cup") | Greeter or Patrol, arm, empty hand |
-| | Fetch | object (one row), From and To as dropdowns side by side, both starting at Here (each list opens under its own button, a few rows, the rest scrolls: Here, then every marker in name order; the charger is a marker like the others), there: keep holding or put on a table | `POST /tasks/fetch` `{object, colour, source, dest, finish}` | Patrol, arm, empty hand |
-| | Take | object | `POST /tasks/steps` `[{do: receive, object, from_hand: true}]` (open hand held out in the `give` pose); Release (task card or Missions) or "okay" closes the hand | Greeter or Patrol, arm, empty hand |
+| | Fetch | object (cup, white cup, grey cup, bottle, apple; Seen now when one like it is in reach), From and To as dropdowns side by side, both starting at Here (each list opens under its own button, a few rows, the rest scrolls: Here, then every marker in name order; the charger is a marker like the others), there: keep holding or put on a table | `POST /tasks/fetch` `{object, colour, source, dest, finish}` | Patrol, arm, empty hand |
+| | Take | object (the same list as Fetch) | `POST /tasks/steps` `[{do: receive, object, from_hand: true}]` (open hand held out in the `give` pose); Release (task card or Missions) or "okay" closes the hand | Greeter or Patrol, arm, empty hand |
 | | Give | | `POST /tasks/give` (arm to the `give` pose) | Greeter or Patrol, arm, holding |
 | | Put it down | | `POST /tasks/place` `{on: null}` | Greeter or Patrol, arm, holding |
 | | Move object (pick it up, put it down at a free spot nearby) | object | `POST /skills/move` `{object, colour}`, watched on `GET /skills/state` | arm, empty hand |
