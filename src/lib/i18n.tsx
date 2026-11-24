@@ -526,6 +526,7 @@ const en = {
   talkErrorsCount: 'Errors {n}',
   talkNoErrors: 'No errors lately',
   talkStuck: "The assistant's main loop is stuck",
+  talkViewTalk: 'Conversation',
 };
 
 export type TextKey = keyof typeof en;
@@ -1036,6 +1037,7 @@ const ko: Record<TextKey, string> = {
   talkErrorsCount: '오류 {n}',
   talkNoErrors: '최근 오류가 없어요',
   talkStuck: '어시스턴트의 메인 루프가 멈췄어요',
+  talkViewTalk: '대화',
 };
 
 const STRINGS: Record<Lang, Record<TextKey, string>> = { en, ko };
