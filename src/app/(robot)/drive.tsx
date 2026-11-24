@@ -7,7 +7,8 @@
 // The body's state chip is the shared one on top. The arm is set up on Commands, ARM SETUP (ui/ArmSetupPanel).
 // Holding stops on release, on a second finger, on leaving the screen, in the background, on STOP and on a failure.
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { AppState, Pressable, StyleSheet, Text, useWindowDimensions, View } from 'react-native';
+import { AppState, Pressable, StyleSheet, Text, View } from 'react-native';
+import { useSteadyWindow } from '../../lib/steadyWindow';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useFocusEffect, useIsFocused } from 'expo-router';
 import * as Haptics from 'expo-haptics';
@@ -60,7 +61,7 @@ const BODY_CONTROLS: AxisControl[] = [
 export default function Drive() {
   const { t } = useI18n();
   const { connection, status } = useRobot();
-  const { width, height } = useWindowDimensions();
+  const { width, height } = useSteadyWindow();
   const inset = useSafeAreaInsets();
   const focused = useIsFocused();
   const [foreground, setForeground] = useState(AppState.currentState === 'active');

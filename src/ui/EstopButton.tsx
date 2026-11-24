@@ -4,7 +4,8 @@
 // released. While the red button on Lumi is pressed only a hand on the robot releases it: E-STOP turns dark red and
 // a tap only buzzes. No words pop up over it (owner, 2026-11-18); the button's own look says held or not.
 import { useEffect, useState } from 'react';
-import { Pressable, StyleSheet, Text, useWindowDimensions, View } from 'react-native';
+import { Pressable, StyleSheet, Text, View } from 'react-native';
+import { useSteadyWindow } from '../lib/steadyWindow';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { usePathname } from 'expo-router';
 import * as Haptics from 'expo-haptics';
@@ -26,7 +27,7 @@ export function EstopButton() {
   const { t } = useI18n();
   const { connection, status } = useRobot();
   const path = usePathname();
-  const { height: h } = useWindowDimensions();
+  const { height: h } = useSteadyWindow();
   const inset = useSafeAreaInsets();
   const [want, setWant] = useState<{ on: boolean } | null>(null);
   const base = status?.base ?? null;

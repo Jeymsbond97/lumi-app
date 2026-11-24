@@ -5,7 +5,8 @@
 // A tap waves at once, without asking (owner, 2026-11-20; COMMANDS > WAVE still asks). It is dimmed while the arm is not enabled (a tap then says so), and shows a spinner
 // until the wave has ended; a refusal or no answer shows under it for a moment.
 import { useEffect, useState } from 'react';
-import { ActivityIndicator, Pressable, StyleSheet, Text, useWindowDimensions, View } from 'react-native';
+import { ActivityIndicator, Pressable, StyleSheet, Text, View } from 'react-native';
+import { useSteadyWindow } from '../lib/steadyWindow';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import * as Haptics from 'expo-haptics';
 import { blocked, reasonKey, send, toOutcome, waveRequest } from '../lib/commands';
@@ -24,7 +25,7 @@ const GAP = 18; // at least this between the button and the modes below it, and 
 export function WaveButton() {
   const { t } = useI18n();
   const { connection, status } = useRobot();
-  const { width: w, height: h } = useWindowDimensions();
+  const { width: w, height: h } = useSteadyWindow();
   const inset = useSafeAreaInsets();
   const [busy, setBusy] = useState(false);
   const [note, setNote] = useState<string | null>(null);

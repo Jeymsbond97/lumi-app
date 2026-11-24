@@ -1,7 +1,8 @@
 // Loading screen: Lumi's glass visor; the eyes look round while the app searches for the robot
 // and look at you once it answers. Ported from .superpowers/preview/loading.html.
 import { useEffect, useState } from 'react';
-import { StyleSheet, Text, useWindowDimensions, View } from 'react-native';
+import { StyleSheet, Text, View } from 'react-native';
+import { useSteadyWindow } from '../lib/steadyWindow';
 import { LinearGradient } from 'expo-linear-gradient';
 import Svg, { Circle, Defs, Ellipse, Path, RadialGradient, Rect, Stop } from 'react-native-svg';
 import Animated, {
@@ -87,7 +88,7 @@ function WifiArc({ d, index, wave }: { d: string; index: number; wave: SharedVal
 
 export function ConnectingView({ connected }: { connected: boolean }) {
   const { t } = useI18n();
-  const { width: w, height: h } = useWindowDimensions();
+  const { width: w, height: h } = useSteadyWindow();
   const look = useLoop(4000);
   const wave = useLoop(1800);
   const [dot, setDot] = useState(0);

@@ -6,7 +6,8 @@
 // the foreground. Two pictures take turns: the next one loads hidden behind the shown
 // one, so a picture never blanks while the next is on its way.
 import { useEffect, useState } from 'react';
-import { AppState, Pressable, StyleSheet, useWindowDimensions } from 'react-native';
+import { AppState, Pressable, StyleSheet } from 'react-native';
+import { useSteadyWindow } from '../lib/steadyWindow';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import Animated, { FadeIn, FadeOut } from 'react-native-reanimated';
 import Svg, { Circle, Path } from 'react-native-svg';
@@ -39,7 +40,7 @@ function Cross({ size, color }: { size: number; color: string }) {
 export function CameraPanel() {
   const { t } = useI18n();
   const { connection } = useRobot();
-  const { width, height } = useWindowDimensions();
+  const { width, height } = useSteadyWindow();
   const inset = useSafeAreaInsets();
   const [open, setOpen] = useState(false);
   const [foreground, setForeground] = useState(AppState.currentState === 'active');

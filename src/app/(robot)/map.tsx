@@ -11,11 +11,11 @@ import {
   ScrollView,
   StyleSheet,
   Text,
-  useWindowDimensions,
   View,
   type GestureResponderEvent,
   type LayoutChangeEvent,
 } from 'react-native';
+import { useSteadyWindow } from '../../lib/steadyWindow';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import * as Haptics from 'expo-haptics';
 import Svg, { Circle, Path, Rect } from 'react-native-svg';
@@ -301,7 +301,7 @@ export default function MapScreen() {
   const { connection, status } = useRobot();
   const url = connection.baseUrl;
   const inset = useSafeAreaInsets();
-  const { width: w, height: h } = useWindowDimensions();
+  const { width: w, height: h } = useSteadyWindow();
 
   const [mapInfo, setInfo] = useState<MapInfo | null>(null); // the base's current map
   // making a new map: what the base says about it, the picture shown and the next one (shown once it has loaded)

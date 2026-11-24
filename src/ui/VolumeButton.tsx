@@ -2,7 +2,8 @@
 // tab; right of STOP on a short screen), not a tile. A tap opens an upright fader beside it (SpeedFader, 0 to 100 %):
 // drag or tap + / −; the robot gets the value when the finger lifts (POST /volume). A tap outside closes it.
 import { useEffect, useState } from 'react';
-import { Pressable, StyleSheet, Text, useWindowDimensions, View } from 'react-native';
+import { Pressable, StyleSheet, Text, View } from 'react-native';
+import { useSteadyWindow } from '../lib/steadyWindow';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import * as Haptics from 'expo-haptics';
 import { cameraLayout } from '../lib/camera';
@@ -24,7 +25,7 @@ export function VolumeButton({ active }: { active: boolean }) {
   const { t } = useI18n();
   const { connection } = useRobot();
   const url = connection.baseUrl;
-  const { width: w, height: h } = useWindowDimensions();
+  const { width: w, height: h } = useSteadyWindow();
   const inset = useSafeAreaInsets();
   const [opened, setOpen] = useState(false);
   const open = opened && active; // leaving the screen closes it

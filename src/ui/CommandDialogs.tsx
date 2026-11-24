@@ -3,7 +3,8 @@
 // screen's middle with its options as tiles (owner, 2026-11-23); a text sits in the free middle at its top, so a
 // phone's keyboard does not cover it. Every footer has two buttons of one size. STOP stays on top of all of them.
 import { useEffect, useRef, useState, type ReactNode } from 'react';
-import { ActivityIndicator, BackHandler, Pressable, ScrollView, StyleSheet, Text, TextInput, useWindowDimensions, View } from 'react-native';
+import { ActivityIndicator, BackHandler, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
+import { useSteadyWindow } from '../lib/steadyWindow';
 import Animated, { FadeIn, FadeOut } from 'react-native-reanimated';
 import { useI18n, type TextKey } from '../lib/i18n';
 import { reasonKey, send, stepLine, stepText, toParsed, type LookDir, type Parsed, type TurnWay } from '../lib/commands';
@@ -144,7 +145,7 @@ export function ChoiceDialog({
   onPick?: (key: string, id: string) => void;
 }) {
   const { t } = useI18n();
-  const { width: w, height: h } = useWindowDimensions();
+  const { width: w, height: h } = useSteadyWindow();
   /** The dropdown open now. */
   const [openKey, setOpenKey] = useState<string | null>(null);
   useEffect(() => {
@@ -396,7 +397,7 @@ const padCell = (h: number) => clamp(52, 0.11 * h, 84);
  */
 export function LookPad({ size, onLook, onClose }: { size: number; onLook: (dir: LookDir) => Promise<string | null>; onClose: () => void }) {
   const { t } = useI18n();
-  const { height: h } = useWindowDimensions();
+  const { height: h } = useSteadyWindow();
   const [busy, setBusy] = useState<LookDir | null>(null);
   const [note, setNote] = useState<string | null>(null);
   const cell = padCell(h);
@@ -447,7 +448,7 @@ export function LookPad({ size, onLook, onClose }: { size: number; onLook: (dir:
 /** TURN (owner, 2026-11-23): 45 deg left, half a turn, 45 deg right; each asks first, as every move of the base. */
 export function TurnPad({ size, onTurn, onClose }: { size: number; onTurn: (way: TurnWay) => void; onClose: () => void }) {
   const { t } = useI18n();
-  const { height: h } = useWindowDimensions();
+  const { height: h } = useSteadyWindow();
   const cell = padCell(h);
   const gap = size * 0.5;
   const key = (way: TurnWay, label: TextKey, path: string | null) => (

@@ -1,7 +1,8 @@
 // The current task, right middle (the modes panel sits on the left): how it goes, the step it is on, and Pause / Resume, Release and Stop.
 // Shown while a task runs and for a moment after it ends; the robot's next reply moves it on.
 import { useState } from 'react';
-import { Pressable, StyleSheet, Text, useWindowDimensions, View } from 'react-native';
+import { Pressable, StyleSheet, Text, View } from 'react-native';
+import { useSteadyWindow } from '../lib/steadyWindow';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import Animated, { FadeIn, FadeOut } from 'react-native-reanimated';
 import * as Haptics from 'expo-haptics';
@@ -33,7 +34,7 @@ const BUTTON_TEXT: Record<TaskCommand, TextKey> = { pause: 'pause', resume: 'res
 export function TaskCard() {
   const { t } = useI18n();
   const { connection, task } = useRobot();
-  const { height: h } = useWindowDimensions();
+  const { height: h } = useSteadyWindow();
   const inset = useSafeAreaInsets();
   const [failed, setFailed] = useState(false);
   const text = clamp(12, 0.021 * h, 17);

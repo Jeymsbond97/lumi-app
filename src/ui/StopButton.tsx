@@ -2,7 +2,8 @@
 // It is never disabled and never waits for an earlier tap: every tap sends STOP again.
 // Look (owner's pick A, 2026-11-16): a red disc in a thin red ring, with a slow wave going out so it is always seen.
 import { useEffect, useRef, useState } from 'react';
-import { Pressable, StyleSheet, Text, useWindowDimensions, View } from 'react-native';
+import { Pressable, StyleSheet, Text, View } from 'react-native';
+import { useSteadyWindow } from '../lib/steadyWindow';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import * as Haptics from 'expo-haptics';
 import Animated, { Easing, FadeIn, FadeOut, useAnimatedStyle, useSharedValue, withRepeat, withTiming } from 'react-native-reanimated';
@@ -22,7 +23,7 @@ export const stopSize = (h: number) => clamp(64, 0.14 * h, 112);
 export function StopButton() {
   const { t, lang } = useI18n();
   const { connection } = useRobot();
-  const { height: h } = useWindowDimensions();
+  const { height: h } = useSteadyWindow();
   const inset = useSafeAreaInsets();
   const [note, setNote] = useState<'stopSent' | 'noAnswer' | null>(null);
   const timer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);

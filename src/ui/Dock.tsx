@@ -1,7 +1,8 @@
 // The sections, bottom centre between the joystick and STOP (style D): one dark pill of words, the open one white with
 // a red dot. A section whose screen is not built yet is dimmed; tapping it says so for a moment.
 import { useEffect, useState } from 'react';
-import { Pressable, StyleSheet, Text, useWindowDimensions, View } from 'react-native';
+import { Pressable, StyleSheet, Text, View } from 'react-native';
+import { useSteadyWindow } from '../lib/steadyWindow';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { router, usePathname, type Href } from 'expo-router';
 import * as Haptics from 'expo-haptics';
@@ -28,7 +29,7 @@ export const SECTIONS: Section[] = [
 export function Dock() {
   const { t } = useI18n();
   const path = usePathname();
-  const { height: h } = useWindowDimensions();
+  const { height: h } = useSteadyWindow();
   const inset = useSafeAreaInsets();
   const [note, setNote] = useState(false);
   const text = clamp(11, 0.02 * h, 15);

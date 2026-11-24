@@ -5,7 +5,8 @@
 // right; sliding it back shuts it. It also locks after 5 minutes with no touch on the screen, on STOP and when the
 // app leaves the foreground (lib/driveLock).
 import { useEffect, useRef, useState } from 'react';
-import { AppState, StyleSheet, Text, useWindowDimensions, View, type GestureResponderEvent } from 'react-native';
+import { AppState, StyleSheet, Text, View, type GestureResponderEvent } from 'react-native';
+import { useSteadyWindow } from '../lib/steadyWindow';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import * as Haptics from 'expo-haptics';
 import Svg, { Circle, Path } from 'react-native-svg';
@@ -66,7 +67,7 @@ export const joystickSize = (h: number) => clamp(120, 0.27 * h, 200);
 export function Joystick() {
   const { t } = useI18n();
   const { connection } = useRobot();
-  const { height: h } = useWindowDimensions();
+  const { height: h } = useSteadyWindow();
   const inset = useSafeAreaInsets();
   const size = joystickSize(h);
   const radius = size / 2;

@@ -1,6 +1,7 @@
 // Asks for a name (a marker), in the same dark look as ConfirmDialog. It sits under STOP, like that dialog.
 import { useEffect, useState } from 'react';
-import { BackHandler, Pressable, StyleSheet, Text, TextInput, useWindowDimensions, View } from 'react-native';
+import { BackHandler, Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
+import { useSteadyWindow } from '../lib/steadyWindow';
 import Animated, { FadeIn, FadeOut, ZoomIn } from 'react-native-reanimated';
 import { useI18n, type TextKey } from '../lib/i18n';
 import { clamp, fonts, mono } from './theme';
@@ -22,7 +23,7 @@ export function NameDialog(props: Props) {
 
 function Ask({ title, rule, initial, valid, onDone, onClose }: Props) {
   const { t } = useI18n();
-  const { width, height } = useWindowDimensions();
+  const { width, height } = useSteadyWindow();
   const size = clamp(13, 0.022 * height, 17);
   const [name, setName] = useState(initial);
 

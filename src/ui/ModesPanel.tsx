@@ -3,7 +3,8 @@
 // each. Tap the switch, or slide it right to switch on and left to switch off.
 // A switch shows what the robot says, not what was tapped: it moves once the robot answers.
 import { useRef, useState } from 'react';
-import { ActivityIndicator, StyleSheet, Text, useWindowDimensions, View, type GestureResponderEvent } from 'react-native';
+import { ActivityIndicator, StyleSheet, Text, View, type GestureResponderEvent } from 'react-native';
+import { useSteadyWindow } from '../lib/steadyWindow';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import * as Haptics from 'expo-haptics';
 import Svg, { Line } from 'react-native-svg';
@@ -49,7 +50,7 @@ function Toggle({ on, w }: { on: boolean; w: number }) {
 export function ModesPanel() {
   const { t, lang } = useI18n();
   const { connection, modes, setModes, status } = useRobot();
-  const { height: h } = useWindowDimensions();
+  const { height: h } = useSteadyWindow();
   const inset = useSafeAreaInsets();
   const [busy, setBusy] = useState<Mode | null>(null);
   const [failed, setFailed] = useState(false);

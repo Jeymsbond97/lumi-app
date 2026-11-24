@@ -2,7 +2,8 @@
 // The same card edits a no-go line (a new name or deleted).
 // A charger's marker (the base docks with it) keeps being one when renamed or moved. Same look as NameDialog, under STOP.
 import { useEffect, useState } from 'react';
-import { BackHandler, Pressable, StyleSheet, Text, TextInput, useWindowDimensions, View } from 'react-native';
+import { BackHandler, Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
+import { useSteadyWindow } from '../lib/steadyWindow';
 import Animated, { FadeIn, FadeOut, ZoomIn } from 'react-native-reanimated';
 import { useI18n, type TextKey } from '../lib/i18n';
 import { validMarkerName, type MapMarker } from '../lib/mapGeom';
@@ -36,7 +37,7 @@ function Edit({
   onClose,
 }: Props & { marker: NonNullable<Props['marker']> }) {
   const { t } = useI18n();
-  const { width, height } = useWindowDimensions();
+  const { width, height } = useSteadyWindow();
   const size = clamp(13, 0.022 * height, 17);
   const [name, setName] = useState(marker.name);
 

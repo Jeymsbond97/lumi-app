@@ -2,7 +2,8 @@
 // It is drawn inside the controls layer under STOP, so STOP stays reachable while it is open.
 // A tap outside the card or the Android back button cancels.
 import { useEffect } from 'react';
-import { BackHandler, Pressable, StyleSheet, Text, useWindowDimensions, View } from 'react-native';
+import { BackHandler, Pressable, StyleSheet, Text, View } from 'react-native';
+import { useSteadyWindow } from '../lib/steadyWindow';
 import Animated, { FadeIn, FadeOut, ZoomIn } from 'react-native-reanimated';
 import { useI18n } from '../lib/i18n';
 import { clamp, fonts, mono } from './theme';
@@ -12,7 +13,7 @@ export type ConfirmRequest = { title: string; choices: ConfirmChoice[] };
 
 export function ConfirmDialog({ request, onClose }: { request: ConfirmRequest | null; onClose: () => void }) {
   const { t } = useI18n();
-  const { width, height } = useWindowDimensions();
+  const { width, height } = useSteadyWindow();
   const size = clamp(13, 0.022 * height, 17);
 
   useEffect(() => {

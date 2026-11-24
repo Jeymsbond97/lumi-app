@@ -7,7 +7,8 @@
 // clear where you are; CLEAN empties only the view in front (the others and the robot's log stay); each error says
 // what to do about it.
 import { useState } from 'react';
-import { ScrollView, StyleSheet, Text, useWindowDimensions, View } from 'react-native';
+import { ScrollView, StyleSheet, Text, View } from 'react-native';
+import { useSteadyWindow } from '../../lib/steadyWindow';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useIsFocused } from 'expo-router';
 import * as Haptics from 'expo-haptics';
@@ -33,7 +34,7 @@ export default function TalkScreen() {
   const { t } = useI18n();
   const { connection, modes } = useRobot();
   const url = connection.baseUrl;
-  const { width: w, height: h } = useWindowDimensions();
+  const { width: w, height: h } = useSteadyWindow();
   const inset = useSafeAreaInsets();
   const focused = useIsFocused();
   const talk = useTalk(url, focused);

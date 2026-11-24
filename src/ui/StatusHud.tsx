@@ -4,7 +4,8 @@
 // disables or powers it off; each asks first in ConfirmDialog). Head, waist and lift are not shown here (owner,
 // 2026-11-18): Drive's BODY page shows them.
 // Battery: BatteryBadge, top right.
-import { ActivityIndicator, Pressable, StyleSheet, Text, useWindowDimensions, View } from 'react-native';
+import { ActivityIndicator, Pressable, StyleSheet, Text, View } from 'react-native';
+import { useSteadyWindow } from '../lib/steadyWindow';
 import { router, usePathname } from 'expo-router';
 import * as Haptics from 'expo-haptics';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -43,7 +44,7 @@ export function StatusHud() {
   const { t } = useI18n();
   const { status } = useRobot();
   const path = usePathname();
-  const { height: h } = useWindowDimensions();
+  const { height: h } = useSteadyWindow();
   const inset = useSafeAreaInsets();
   const { arm, body: bodyNow, busyArm, busyBody, switchArm, switchBody, note, ask, closeAsk } = usePowerSwitch();
   const { nameSize, small } = nameSizes(h);

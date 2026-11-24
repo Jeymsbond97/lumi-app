@@ -5,7 +5,8 @@
 // has the typed command box: read as voice reads it first.
 // The content sits between the modes on the left, the task card on the right, the power chips on top and the Dock.
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { Pressable, ScrollView, StyleSheet, Text, useWindowDimensions, View } from 'react-native';
+import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { useSteadyWindow } from '../../lib/steadyWindow';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useIsFocused } from 'expo-router';
 import * as Haptics from 'expo-haptics';
@@ -169,7 +170,7 @@ export default function CommandsScreen() {
   const { t, lang } = useI18n();
   const { connection, status, task, modes } = useRobot();
   const url = connection.baseUrl;
-  const { width: w, height: h } = useWindowDimensions();
+  const { width: w, height: h } = useSteadyWindow();
   const inset = useSafeAreaInsets();
   const focused = useIsFocused();
 

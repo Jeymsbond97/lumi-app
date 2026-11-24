@@ -2,7 +2,8 @@
 // upright battery that fills with it. Green, red and blinking when low. While Lumi charges a lightning bolt shows
 // inside the battery and the fill breathes; off the charger the bolt is gone. No words.
 import { useEffect } from 'react';
-import { StyleSheet, Text, useWindowDimensions, View } from 'react-native';
+import { StyleSheet, Text, View } from 'react-native';
+import { useSteadyWindow } from '../lib/steadyWindow';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import Animated, { cancelAnimation, useAnimatedStyle, useSharedValue, withRepeat, withSequence, withTiming } from 'react-native-reanimated';
 import Svg, { Path, Rect } from 'react-native-svg';
@@ -44,7 +45,7 @@ function BatteryIcon({ pct, charging, height }: { pct: number; charging: boolean
 export function BatteryBadge() {
   const { t } = useI18n();
   const { status } = useRobot();
-  const { height: h } = useWindowDimensions();
+  const { height: h } = useSteadyWindow();
   const inset = useSafeAreaInsets();
   const pulse = useSharedValue(1);
   const pct = status?.battery == null ? null : Math.round(status.battery);
