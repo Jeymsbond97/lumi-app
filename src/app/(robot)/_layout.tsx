@@ -1,7 +1,8 @@
 // Every screen after the loading screen: Lumi is asked about once a second for all of them, and the status,
 // the modes, the current task, the cameras, the sections and STOP sit on top of each screen.
 // While the landing view still covers the screen nothing shows over it (see lib/landing).
-import { StyleSheet, View } from 'react-native';
+import { useState } from 'react';
+import { StyleSheet, View, type LayoutChangeEvent } from 'react-native';
 import { Tabs, usePathname } from 'expo-router';
 import Animated, { FadeIn } from 'react-native-reanimated';
 import { RobotProvider } from '../../lib/robot';
@@ -40,13 +41,30 @@ function Controls() {
   );
 }
 
+/**
+ * The screen's full height, kept while the keyboard is up. Android (Expo Go: adjustResize) makes the app shorter
+ * when a keyboard opens, and everything placed from the bottom or centred (the modes, the Dock, the tiles) jumped up
+ * and back down when it closed (owner, 2026-11-24). Holding the tallest height seen at this width lets the keyboard
+ * cover the bottom instead; the dialogs that take text sit at the top, clear of it.
+ */
+function useSteadyHeight() {
+  const [tall, setTall] = useState<{ w: number; h: number } | null>(null);
+  const onLayout = (e: LayoutChangeEvent) => {
+    const { width: w, height: h } = e.nativeEvent.layout;
+    setTall((prev) => (prev && Math.abs(prev.w - w) < 1 && prev.h >= h ? prev : { w, h }));
+  };
+  return { onLayout, minHeight: tall?.h };
+}
+
 export default function RobotLayout() {
+  const steady = useSteadyHeight();
   return (
     <RobotProvider>
       <LandingProvider>
         {/* every touch on these screens counts as someone being there: the joystick locks after 5 minutes without */}
         <View
-          style={styles.root}
+          style={[styles.root, { minHeight: steady.minHeight }]}
+          onLayout={steady.onLayout}
           onStartShouldSetResponderCapture={() => {
             noteTouch(Date.now());
             return false;
