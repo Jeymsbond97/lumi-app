@@ -7,6 +7,7 @@ export type CommandIconName =
   | 'give'
   | 'receive'
   | 'aside'
+  | 'sort'
   | 'wave'
   | 'come'
   | 'follow'
@@ -50,6 +51,13 @@ export function CommandIcon({ name, size, color }: { name: CommandIconName; size
         <>
           <Path d="M3 13h7l-1 7H4z" {...p} />
           <Path d="M13 9h8M18 6l3 3-3 3" {...p} />
+        </>
+      )}
+      {name === 'sort' && (
+        <>
+          <Circle cx={7} cy={5} r={2.2} {...p} />
+          <Circle cx={17} cy={5} r={2.2} {...p} />
+          <Path d="M7 9v3.5M17 9v3.5M3 14.5V20h8v-5.5M13 14.5V20h8v-5.5" {...p} />
         </>
       )}
       {name === 'wave' && (

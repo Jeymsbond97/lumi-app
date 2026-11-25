@@ -312,6 +312,9 @@ export const receiveRequest = (t: Thing, lang: Lang) =>
   stepsRequest([{ do: 'receive', object: t.object, from_hand: true }], lang);
 /** Pick it up and put it at a free spot nearby (a skill: /skills/state shows how it goes). */
 export const asideRequest = (t: Thing): Request => ({ path: '/skills/move', body: { object: t.object, colour: t.colour } });
+/** Sort the balls on the plate into the boxes of their colour (a skill: /skills/state shows how it goes; robot side in
+ *  docs/sorting of the robot repository, docs/SORTING.md here). */
+export const sortRequest: Request = { path: '/skills/sort', body: {} };
 export const placeRequest: Request = { path: '/tasks/place', body: { on: null } };
 export const giveRequest: Request = { path: '/tasks/give' };
 export const releaseRequest: Request = { path: '/tasks/release' };

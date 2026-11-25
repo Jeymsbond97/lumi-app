@@ -29,7 +29,7 @@ are plain functions in `src/lib/commands.ts`, tested in `src/lib/__tests__/comma
   open, so a marker just added, or the markers of a new map, show at once; every place (FETCH From and To, GO TO,
   CARRY To) is one dropdown: Here first where it fits, then every marker in name order, the charger (`home`) a marker
   like the others; its list opens under the button on a quiet ground with no frame, a few rows, the rest scrolls; GO TO and CARRY
-  open on Select (nothing chosen, GO off), FETCH on Here (owner, 2026-11-24). ARM & OBJECTS: Ask and Say are a row of their own in the middle; Drive is gone (the joystick drives).
+  open on Select (nothing chosen, GO off), FETCH on Here (owner, 2026-11-24). ARM & OBJECTS: Ask, Say and Sort are a row of their own in the middle; Drive is gone (the joystick drives).
 - **The status line** under the groups: how the last tap in that group went (sending, Lumi is on it, the assistant
   does it, done, refused and the robot's reason, Lumi did not answer); each group keeps its own, so ARM SETUP's taps
   never show on Arm & objects. For "Move object" it follows `/skills/state` (working, done, refused with its reason).
@@ -74,6 +74,7 @@ are plain functions in `src/lib/commands.ts`, tested in `src/lib/__tests__/comma
 | | Carry it | marker, then: keep holding, put on a table, hand it over | `POST /tasks/carry` `{dest: {marker}, then, on: null}` | Patrol, arm, holding |
 | | Ask | text | `POST /ask` `{question, speak: true}` (the answer is shown too); while the assistant runs `POST /tasks/command` with the question | |
 | | Say | text | `POST /say` `{text}`; while the assistant runs (it owns the speaker and `/say` is refused) a mission `[{do: say, text}]` | |
+| | Sort (balls from the plate into the box of their colour, docs/SORTING.md) | | `POST /skills/sort` `{}`, watched on `GET /skills/state`; asks first. The robot endpoint is not built yet: until it is, the robot refuses it | arm, empty hand |
 | Missions | Type a command | free text, or an example | `POST /tasks/parse` `{text, llm: false}` 0.6 s after typing stops, `llm: true` on Enter (nothing moves); START sends what it read: `steps` → `/tasks/steps`, `fetch` → `/tasks/fetch`, `carry` → `/tasks/carry`, `give` → `/tasks/give`, `place` → `/tasks/place`, `command` → `/tasks/command` (exactly as the dashboard's Command dialog) | what the robot says in `problems` |
 | | Pause / Resume / Release / Stop | | `POST /tasks/pause`, `/tasks/resume`, `/tasks/release`, `/tasks/stop` | a task that offers it (`taskButtons`) |
 

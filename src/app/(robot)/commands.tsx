@@ -33,6 +33,7 @@ import {
   read,
   reasonKey,
   receiveRequest,
+  sortRequest,
   sayRequest,
   send,
   singRequest,
@@ -134,8 +135,8 @@ const TASK_TILES: { cmd: TaskCommand; icon: CommandIconName; label: TextKey }[] 
   { cmd: 'stop', icon: 'stop', label: 'stopTask' },
 ];
 
-/** ARM & OBJECTS' last row, centred. */
-const PAIR: TextKey[] = ['cmdAsk', 'cmdSay'];
+/** ARM & OBJECTS' last row, centred under the middle columns: Ask, Say and Sort (owner, 2026-11-25). */
+const LAST_ROW: TextKey[] = ['cmdAsk', 'cmdSay', 'cmdSort'];
 const EXAMPLES: TextKey[] = ['cmdEx1', 'cmdEx2', 'cmdEx3', 'cmdEx4'];
 const TURNS: { id: TurnWay; label: TextKey; ask: TextKey }[] = [
   { id: 'left', label: 'cmdTurnLeft', ask: 'cmdAskTurnLeft' },
@@ -596,6 +597,13 @@ export default function CommandsScreen() {
       },
       { icon: 'ask', label: 'cmdAsk', hint: 'cmdAskHint', onPress: () => setText('ask') },
       { icon: 'say', label: 'cmdSay', hint: 'cmdSayHint', onPress: () => setText('say') },
+      {
+        icon: 'sort',
+        label: 'cmdSort',
+        hint: 'cmdSortHint',
+        needs: ['arm', 'empty'],
+        onPress: () => go({ label: 'cmdSort', req: sortRequest, ask: t('cmdAskSort'), skill: true }),
+      },
     ],
     mission: [
       ...TASK_TILES.map(
@@ -632,9 +640,10 @@ export default function CommandsScreen() {
   const fit = (n: number) => Math.floor((inner - gap * (n - 1)) / n) - 1;
   const tileW = fit(cols);
   const taskW = fit(TASK_TILES.length);
-  // Ask and Say a row of their own in the middle, as wide together as the three middle tiles above (owner, 2026-11-24)
-  const pairSpan = Math.max(2, cols - 2);
-  const pairW = Math.floor((pairSpan * tileW + (pairSpan - 2) * gap) / 2);
+  // the last row in the middle, as wide together as the three middle tiles above (owner, 2026-11-24): two tiles a
+  // little wider than the others, three exactly as wide
+  const lastSpan = Math.max(2, cols - 2);
+  const lastW = Math.floor((lastSpan * tileW + (lastSpan - LAST_ROW.length) * gap) / LAST_ROW.length);
 
   const statusLine = (): { dot: string; head: string; words: string } => {
     if (group === 'armSetup' && power.note) return { dot: mono.yellow, head: t('cmdGroupArmSetup'), words: t(power.note) };
@@ -762,10 +771,10 @@ export default function CommandsScreen() {
                 <CommandBox size={size} baseUrl={url} examples={EXAMPLES} onStart={startParsed} />
               </View>
             )}
-            {TILES[group].filter((tile) => !PAIR.includes(tile.label)).map((tile) => renderTile(tile))}
+            {TILES[group].filter((tile) => !LAST_ROW.includes(tile.label)).map((tile) => renderTile(tile))}
             {group === 'arm' && (
               <View style={[styles.pairRow, { width: inner, gap }]}>
-                {TILES.arm.filter((tile) => PAIR.includes(tile.label)).map((tile) => renderTile(tile, pairW))}
+                {TILES.arm.filter((tile) => LAST_ROW.includes(tile.label)).map((tile) => renderTile(tile, lastW))}
               </View>
             )}
           </ScrollView>
