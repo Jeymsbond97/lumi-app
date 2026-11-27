@@ -14,8 +14,8 @@ repository (GitHub). Start with `docs/sorting/README.md` there.
 |---|---|
 | SORT tile in COMMANDS → ARM & OBJECTS; needs the arm on and an empty hand; asks first | `src/app/(robot)/commands.tsx`, icon in `src/ui/CommandIcon.tsx` |
 | `POST /skills/sort`, sent as a skill so the status line follows `GET /skills/state` | `src/lib/commands.ts` (`sortRequest`) |
-| Status line: "Sorting: 2 of 4", then "Done", or the robot's reason | existing skill status handling, counts from `sort` in `/skills/state` |
-| Texts in English and Korean | `src/lib/i18n.tsx` (`cmdSort`, `cmdSortHint`, `cmdAskSort`) |
+| SORT runs until STOP: it sorts the balls on the tray, waits while the tray is empty and sorts every ball put there later. Status line: "Sorting the red ball. Sorted 2", "Sorted 5. Waiting for balls on the tray", after STOP "Stopped. Sorted 6", or the robot's reason | `sortLine` in `src/lib/commands.ts`, from `sort` in `/skills/state` |
+| Texts in English and Korean | `src/lib/i18n.tsx` (`cmdSort`, `cmdSortHint`, `cmdAskSort`, `cmdSortWaiting`, `cmdSortBall`, `cmdSortLooking`, `cmdSortStopped`, and the refusals `cmdSortNoLayout`, `cmdSortNoTeach`, `cmdSortMisses`) |
 | STOP | the existing STOP on every screen stops the skill |
 
 The robot side (`/skills/sort`, the policy runtime, safety checks) is described in `docs/sorting/06_INTEGRATION.md`.

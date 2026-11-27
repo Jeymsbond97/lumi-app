@@ -74,7 +74,7 @@ are plain functions in `src/lib/commands.ts`, tested in `src/lib/__tests__/comma
 | | Carry it | marker, then: keep holding, put on a table, hand it over | `POST /tasks/carry` `{dest: {marker}, then, on: null}` | Patrol, arm, holding |
 | | Ask | text | `POST /ask` `{question, speak: true}` (the answer is shown too); while the assistant runs `POST /tasks/command` with the question | |
 | | Say | text | `POST /say` `{text}`; while the assistant runs (it owns the speaker and `/say` is refused) a mission `[{do: say, text}]` | |
-| | Sort (balls from the plate into the box of their colour, docs/SORTING.md) | | `POST /skills/sort` `{}`, watched on `GET /skills/state`; asks first. The robot endpoint is not built yet: until it is, the robot refuses it | arm, empty hand |
+| | Sort (balls from the tray into the box of their colour until STOP, also balls put back later, docs/SORTING.md) | | `POST /skills/sort` `{}`, watched on `GET /skills/state` (sorted count, the ball in the hand, waiting); asks first; STOP ends it | arm, empty hand |
 | Missions | Type a command | free text, or an example | `POST /tasks/parse` `{text, llm: false}` 0.6 s after typing stops, `llm: true` on Enter (nothing moves); START sends what it read: `steps` → `/tasks/steps`, `fetch` → `/tasks/fetch`, `carry` → `/tasks/carry`, `give` → `/tasks/give`, `place` → `/tasks/place`, `command` → `/tasks/command` (exactly as the dashboard's Command dialog) | what the robot says in `problems` |
 | | Pause / Resume / Release / Stop | | `POST /tasks/pause`, `/tasks/resume`, `/tasks/release`, `/tasks/stop` | a task that offers it (`taskButtons`) |
 
