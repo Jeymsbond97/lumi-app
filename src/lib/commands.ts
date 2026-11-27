@@ -72,6 +72,10 @@ const KNOWN_REASONS: [RegExp, TextKey][] = [
   [/too close to my head/i, 'armNearHead'],
   [/position I don't know/i, 'armUnknownPose'],
   [/can't move my arm there safely/i, 'armBlocked'],
+  // Thor manipulation/sort.py
+  [/boxes aren't set up/i, 'cmdSortNoLayout'],
+  [/learned how to hold a ball/i, 'cmdSortNoTeach'],
+  [/balls in a row/i, 'cmdSortMisses'],
 ];
 
 export function reasonKey(reason: string | null): TextKey | null {
@@ -269,21 +273,62 @@ export function toHolding(raw: unknown): boolean | null {
 export type SkillStatus = 'idle' | 'running' | 'done' | 'refused' | 'stopped' | 'failed';
 const SKILL_STATUSES: SkillStatus[] = ['idle', 'running', 'done', 'refused', 'stopped', 'failed'];
 
+/** How far SORT is (the robot's manipulation/sort.py state): it runs until STOP, waiting while the tray is empty. */
+export interface SortProgress {
+  done: number;
+  failed: number;
+  waiting: boolean;
+  stopped: boolean;
+  /** The colour of the ball in the hand now, if it is one the app names. */
+  colour: Colour | null;
+}
+
 export interface SkillState {
   status: SkillStatus;
   skill: string | null;
   reason: string | null;
+  sort: SortProgress | null;
+}
+
+const count = (v: unknown) => (typeof v === 'number' && Number.isFinite(v) && v >= 0 ? Math.round(v) : 0);
+
+function toSortProgress(raw: unknown): SortProgress | null {
+  if (!raw || typeof raw !== 'object') return null;
+  const o = raw as { done?: unknown; failed?: unknown; waiting?: unknown; stopped?: unknown; current?: unknown };
+  const cur = (o.current ?? null) as { colour?: unknown } | null;
+  return {
+    done: count(o.done),
+    failed: count(o.failed),
+    waiting: o.waiting === true,
+    stopped: o.stopped === true,
+    colour: COLOURS.find((c) => c === cur?.colour) ?? null,
+  };
 }
 
 export function toSkillState(raw: unknown): SkillState | null {
-  const o = (raw ?? {}) as { status?: unknown; skill?: unknown; reason?: unknown };
+  const o = (raw ?? {}) as { status?: unknown; skill?: unknown; reason?: unknown; sort?: unknown };
   const status = SKILL_STATUSES.find((s) => s === o.status);
   if (!status) return null;
   return {
     status,
     skill: typeof o.skill === 'string' ? o.skill : null,
     reason: typeof o.reason === 'string' && o.reason.trim() ? o.reason.trim() : null,
+    sort: o.skill === 'sort' ? toSortProgress(o.sort) : null,
   };
+}
+
+/** The status line's words for SORT: which text and its values (`colour` is a text key), or null for the usual
+ *  skill words (a refusal or a fault keeps its reason). */
+export function sortLine(status: SkillStatus, s: SortProgress | null): { key: TextKey; done: number; colour: TextKey | null } | null {
+  if (!s) return null;
+  const colour = s.colour ? COLOUR_TEXT[s.colour] : null;
+  if (status === 'running') {
+    if (s.waiting) return { key: 'cmdSortWaiting', done: s.done, colour: null };
+    if (colour) return { key: 'cmdSortBall', done: s.done, colour };
+    return { key: 'cmdSortLooking', done: s.done, colour: null };
+  }
+  if (status === 'done' && s.stopped) return { key: 'cmdSortStopped', done: s.done, colour: null };
+  return null;
 }
 
 // ---------- what each action sends ----------

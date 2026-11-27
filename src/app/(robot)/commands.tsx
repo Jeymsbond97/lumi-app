@@ -33,6 +33,7 @@ import {
   read,
   reasonKey,
   receiveRequest,
+  sortLine,
   sortRequest,
   sayRequest,
   send,
@@ -660,11 +661,14 @@ export default function CommandsScreen() {
     };
     if (last.skill && last.phase === 'sent' && skill && skill.readAt > (last.answeredAt ?? last.at) && skill.status !== 'idle') {
       const bad = skill.status === 'refused' || skill.status === 'stopped' || skill.status === 'failed';
-      return {
-        dot: skill.status === 'running' ? mono.blue : bad ? mono.yellow : mono.green,
-        head,
-        words: bad && skill.reason ? said(skill.reason) : t(SKILL_TEXT[skill.status]),
-      };
+      // SORT runs until STOP: how many are sorted, the ball in the hand, or waiting for balls
+      const sorting = sortLine(skill.status, skill.sort);
+      const words = sorting
+        ? fill(t(sorting.key), { done: sorting.done, colour: sorting.colour ? t(sorting.colour) : '' })
+        : bad && skill.reason
+          ? said(skill.reason)
+          : t(SKILL_TEXT[skill.status]);
+      return { dot: skill.status === 'running' ? mono.blue : bad ? mono.yellow : mono.green, head, words };
     }
     switch (last.phase) {
       case 'sending':
