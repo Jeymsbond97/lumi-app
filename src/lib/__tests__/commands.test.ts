@@ -22,6 +22,7 @@ import {
   toMarkers,
   toOutcome,
   toParsed,
+  sortLine,
   toSkillState,
   toSongs,
   turnRequest,
@@ -119,9 +120,41 @@ describe('readings', () => {
       status: 'refused',
       skill: 'move',
       reason: 'no cup seen',
+      sort: null,
     });
-    expect(toSkillState({ status: 'idle', log: [] })).toEqual({ status: 'idle', skill: null, reason: null });
+    expect(toSkillState({ status: 'idle', log: [] })).toEqual({ status: 'idle', skill: null, reason: null, sort: null });
     expect(toSkillState({ status: 'new' })).toBeNull();
+  });
+
+  it('reads how far SORT is, which runs until STOP', () => {
+    const s = toSkillState({
+      status: 'running',
+      skill: 'sort',
+      sort: { done: 3, failed: 1, left: 2, current: { colour: 'red', box: 'red' }, waiting: false, stopped: false },
+    });
+    expect(s?.sort).toEqual({ done: 3, failed: 1, waiting: false, stopped: false, colour: 'red' });
+    expect(toSkillState({ status: 'running', skill: 'sort', sort: { done: -1, current: { colour: 'teal' } } })?.sort).toEqual({
+      done: 0,
+      failed: 0,
+      waiting: false,
+      stopped: false,
+      colour: null,
+    });
+    // another skill's state carries no sort progress
+    expect(toSkillState({ status: 'running', skill: 'move', sort: { done: 3 } })?.sort).toBeNull();
+  });
+
+  it('words SORT by what it is doing', () => {
+    const p = { done: 4, failed: 0, waiting: false, stopped: false, colour: null };
+    expect(sortLine('running', { ...p, waiting: true })).toEqual({ key: 'cmdSortWaiting', done: 4, colour: null });
+    expect(sortLine('running', { ...p, colour: 'yellow' })).toEqual({ key: 'cmdSortBall', done: 4, colour: 'colYellow' });
+    expect(sortLine('running', p)).toEqual({ key: 'cmdSortLooking', done: 4, colour: null });
+    expect(sortLine('done', { ...p, stopped: true })).toEqual({ key: 'cmdSortStopped', done: 4, colour: null });
+    // a refusal keeps its reason
+    expect(sortLine('refused', p)).toBeNull();
+    expect(sortLine('running', null)).toBeNull();
+    expect(reasonKey('I missed 3 balls in a row, so I stopped.')).toBe('cmdSortMisses');
+    expect(reasonKey("The boxes aren't set up.")).toBe('cmdSortNoLayout');
   });
 });
 
